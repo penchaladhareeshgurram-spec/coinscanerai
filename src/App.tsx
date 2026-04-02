@@ -35,28 +35,28 @@ const initialMarketsData = {
   'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.27, history: generateHistory(1.0850, 0.001, 60) },
 };
 
-const performanceData = [
+const initialPerformanceData = [
   { time: '09:00', value: 100000 }, { time: '10:00', value: 101200 },
   { time: '11:00', value: 100800 }, { time: '12:00', value: 102500 },
   { time: '13:00', value: 103100 }, { time: '14:00', value: 102800 },
   { time: '15:00', value: 104200 }, { time: '16:00', value: 105500 },
 ];
 
-const activeTrades = [
+const initialActiveTrades = [
   { id: 'TRD-8921', asset: 'BTC/USD', type: 'LONG', entry: 64230.50, current: 65100.20, pnl: '+1.35%', pnlVal: 1250.00, risk: '1.2%' },
   { id: 'TRD-8922', asset: 'ETH/USD', type: 'SHORT', entry: 3450.00, current: 3420.10, pnl: '+0.86%', pnlVal: 450.00, risk: '1.0%' },
   { id: 'TRD-8923', asset: 'AAPL', type: 'LONG', entry: 175.20, current: 174.80, pnl: '-0.22%', pnlVal: -120.00, risk: '0.5%' },
   { id: 'TRD-8924', asset: 'EUR/USD', type: 'SHORT', entry: 1.0850, current: 1.0820, pnl: '+0.27%', pnlVal: 310.00, risk: '1.5%' },
 ];
 
-const notificationsData = [
+const initialNotificationsData = [
   { id: 1, type: 'BUY', asset: 'BTC/USD', price: '$64,230.50', time: '2m ago', msg: 'AI executed LONG position based on RSI divergence.' },
   { id: 2, type: 'SELL', asset: 'ETH/USD', price: '$3,450.00', time: '15m ago', msg: 'AI closed SHORT position. Take profit hit (+1.2%).' },
   { id: 3, type: 'BUY', asset: 'AAPL', price: '$175.20', time: '1h ago', msg: 'AI executed LONG position. Earnings momentum detected.' },
   { id: 4, type: 'ALERT', asset: 'SYSTEM', price: '', time: '2h ago', msg: 'Daily drawdown limit adjusted due to high market volatility.' }
 ];
 
-const holdingsData = [
+const initialHoldingsData = [
   { asset: 'Bitcoin', symbol: 'BTC', amount: '0.85', value: 55335.17, allocation: 52.4, pnl: '+12.4%' },
   { asset: 'Ethereum', symbol: 'ETH', amount: '8.4', value: 28728.84, allocation: 27.2, pnl: '+5.2%' },
   { asset: 'US Dollar', symbol: 'USD', amount: '21435.99', value: 21435.99, allocation: 20.4, pnl: '0.0%' },
@@ -69,6 +69,135 @@ export default function App() {
   const [botActive, setBotActive] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  const [marketsData, setMarketsData] = useState(initialMarketsData);
+  const [activeTrades, setActiveTrades] = useState(initialActiveTrades);
+  const [holdingsData, setHoldingsData] = useState(initialHoldingsData);
+  const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
+  const [performanceData, setPerformanceData] = useState(initialPerformanceData);
+
+  const marketsDataRef = useRef(marketsData);
+  useEffect(() => {
+    marketsDataRef.current = marketsData;
+  }, [marketsData]);
+
+  // Live markets update
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMarketsData(prev => {
+        const newData = { ...prev };
+        Object.keys(newData).forEach(key => {
+          const market = newData[key as keyof typeof newData];
+          const lastPrice = market.price;
+          let volatility = 1;
+          if (key === 'BTC/USD') volatility = 40;
+          if (key === 'ETH/USD') volatility = 5;
+          if (key === 'S&P 500') volatility = 2;
+          if (key === 'EUR/USD') volatility = 0.0005;
+
+          const change = (Math.random() - 0.5) * volatility;
+          const newPrice = Number((lastPrice + change).toFixed(key === 'EUR/USD' ? 4 : 2));
+          const newChangePct = Number((market.change + (change / lastPrice) * 10).toFixed(2));
+
+          const newHistory = [...market.history.slice(1), {
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+            price: newPrice
+          }];
+
+          newData[key as keyof typeof newData] = { 
+            ...market, price: newPrice, change: newChangePct, history: newHistory 
+          };
+        });
+        return newData;
+      });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update active trades PNL based on live market data
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTrades(prev => prev.map(trade => {
+        const market = marketsDataRef.current[trade.asset as keyof typeof initialMarketsData];
+        if (!market) return trade;
+        
+        const currentPrice = market.price;
+        const entryPrice = trade.entry;
+        const isLong = trade.type === 'LONG';
+        
+        const pnlPct = isLong 
+          ? ((currentPrice - entryPrice) / entryPrice) * 100 
+          : ((entryPrice - currentPrice) / entryPrice) * 100;
+          
+        const positionSize = 10000;
+        const pnlVal = positionSize * (pnlPct / 100);
+        
+        return {
+          ...trade,
+          current: currentPrice,
+          pnl: `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`,
+          pnlVal: pnlVal
+        };
+      }));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // AI Bot Logic
+  useEffect(() => {
+    if (!botActive) return;
+
+    const interval = setInterval(() => {
+      const currentMarkets = marketsDataRef.current;
+      const assets = Object.keys(currentMarkets) as Array<keyof typeof initialMarketsData>;
+      const randomAsset = assets[Math.floor(Math.random() * assets.length)];
+      const market = currentMarkets[randomAsset];
+      
+      setActiveTrades(prev => {
+        let newTrades = [...prev];
+        if (newTrades.length >= 8) {
+          const closedTrade = newTrades.pop();
+          if (closedTrade) {
+            setNotificationsData(nPrev => [{
+              id: Date.now() + 1,
+              type: 'SELL',
+              asset: closedTrade.asset,
+              price: `$${closedTrade.current.toLocaleString()}`,
+              time: 'Just now',
+              msg: `AI closed ${closedTrade.type} position. PNL: ${closedTrade.pnl}`
+            }, ...nPrev].slice(0, 20));
+          }
+        }
+        
+        const isLong = Math.random() > 0.3;
+        const type = isLong ? 'LONG' : 'SHORT';
+        
+        const newTrade = {
+          id: `TRD-${Math.floor(Math.random() * 10000)}`,
+          asset: randomAsset,
+          type: type,
+          entry: market.price,
+          current: market.price,
+          pnl: '+0.00%',
+          pnlVal: 0.00,
+          risk: '1.0%'
+        };
+        
+        setNotificationsData(nPrev => [{
+          id: Date.now(),
+          type: type === 'LONG' ? 'BUY' : 'SELL',
+          asset: randomAsset,
+          price: `$${market.price.toLocaleString()}`,
+          time: 'Just now',
+          msg: `AI executed ${type} position on ${randomAsset}.`
+        }, ...nPrev].slice(0, 20));
+
+        return [newTrade, ...newTrades];
+      });
+    }, 4000); // AI acts every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [botActive]);
 
   // Close notifications when clicking outside
   useEffect(() => {
@@ -174,10 +303,10 @@ export default function App() {
 
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
-          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} />}
-          {activeTab === 'markets' && <MarketsView />}
+          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} />}
+          {activeTab === 'markets' && <MarketsView marketsData={marketsData} />}
           {activeTab === 'strategy' && <StrategyBuilderView />}
-          {activeTab === 'portfolio' && <PortfolioView />}
+          {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
           {activeTab === 'risk' && <RiskManagementView />}
           {activeTab === 'settings' && <SettingsView onLogout={() => setIsAuthenticated(false)} />}
         </div>
@@ -187,7 +316,7 @@ export default function App() {
 }
 
 // --- Dashboard View Component ---
-function DashboardView({ botActive, setBotActive }: { botActive: boolean, setBotActive: (val: boolean) => void }) {
+function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any }) {
   return (
     <div className="flex flex-col gap-6 pb-10">
       <div className="flex flex-col lg:flex-row gap-6">
@@ -327,14 +456,24 @@ function DashboardView({ botActive, setBotActive }: { botActive: boolean, setBot
             <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Market Overview</h2>
           </div>
           <div className="flex-1 p-2">
-            {Object.entries(initialMarketsData).slice(0, 4).map(([symbol, data]) => (
-              <div key={symbol} className="flex items-center justify-between p-3 hover:bg-[#1A1A1A] rounded-lg cursor-pointer transition-colors">
-                <div className="font-semibold text-sm">{symbol}</div>
-                <div className="text-right">
-                  <div className="font-mono text-sm">${data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                  <div className={`text-xs font-mono ${data.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
+            {Object.entries(marketsData).slice(0, 4).map(([symbol, data]: [string, any]) => (
+              <div key={symbol} className="flex flex-col p-3 hover:bg-[#1A1A1A] rounded-lg transition-colors border-b border-[#262626] last:border-0">
+                <div className="flex items-center justify-between cursor-pointer mb-2">
+                  <div className="font-semibold text-sm">{symbol}</div>
+                  <div className="text-right">
+                    <div className="font-mono text-sm">${data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                    <div className={`text-xs font-mono ${data.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
+                    </div>
                   </div>
+                </div>
+                <div className="flex gap-2 mt-1">
+                  <button className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                    Buy
+                  </button>
+                  <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                    Sell
+                  </button>
                 </div>
               </div>
             ))}
@@ -346,41 +485,8 @@ function DashboardView({ botActive, setBotActive }: { botActive: boolean, setBot
 }
 
 // --- Markets View Component (Live Updating) ---
-function MarketsView() {
-  const [marketsData, setMarketsData] = useState(initialMarketsData);
+function MarketsView({ marketsData }: { marketsData: any }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketsData(prev => {
-        const newData = { ...prev };
-        Object.keys(newData).forEach(key => {
-          const market = newData[key as keyof typeof newData];
-          const lastPrice = market.price;
-          let volatility = 1;
-          if (key === 'BTC/USD') volatility = 40;
-          if (key === 'ETH/USD') volatility = 5;
-          if (key === 'S&P 500') volatility = 2;
-          if (key === 'EUR/USD') volatility = 0.0005;
-
-          const change = (Math.random() - 0.5) * volatility;
-          const newPrice = Number((lastPrice + change).toFixed(key === 'EUR/USD' ? 4 : 2));
-          const newChangePct = Number((market.change + (change / lastPrice) * 10).toFixed(2));
-
-          const newHistory = [...market.history.slice(1), {
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
-            price: newPrice
-          }];
-
-          newData[key as keyof typeof newData] = { 
-            ...market, price: newPrice, change: newChangePct, history: newHistory 
-          };
-        });
-        return newData;
-      });
-    }, 2000);
-    return () => clearInterval(interval);
-  }, []);
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
@@ -392,25 +498,34 @@ function MarketsView() {
           <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Live Markets</h2>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {Object.entries(marketsData).map(([symbol, data]) => (
-            <button
+          {Object.entries(marketsData).map(([symbol, data]: [string, any]) => (
+            <div
               key={symbol}
-              onClick={() => setSelectedMarket(symbol)}
-              className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors ${selectedMarket === symbol ? 'bg-[#262626] border border-[#404040]' : 'hover:bg-[#1A1A1A] border border-transparent'}`}
+              className={`w-full flex flex-col p-3 rounded-lg transition-colors ${selectedMarket === symbol ? 'bg-[#262626] border border-[#404040]' : 'hover:bg-[#1A1A1A] border border-transparent'}`}
             >
-              <div className="text-left">
-                <div className="font-bold text-sm text-white">{symbol}</div>
-                <div className="text-xs text-[#A3A3A3]">{data.name}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-sm text-white">
-                  ${data.price.toLocaleString(undefined, {minimumFractionDigits: symbol === 'EUR/USD' ? 4 : 2, maximumFractionDigits: symbol === 'EUR/USD' ? 4 : 2})}
+              <button onClick={() => setSelectedMarket(symbol)} className="flex items-center justify-between w-full text-left mb-2">
+                <div>
+                  <div className="font-bold text-sm text-white">{symbol}</div>
+                  <div className="text-xs text-[#A3A3A3]">{data.name}</div>
                 </div>
-                <div className={`text-xs font-mono flex items-center justify-end ${data.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                  {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
+                <div className="text-right">
+                  <div className="font-mono text-sm text-white">
+                    ${data.price.toLocaleString(undefined, {minimumFractionDigits: symbol === 'EUR/USD' ? 4 : 2, maximumFractionDigits: symbol === 'EUR/USD' ? 4 : 2})}
+                  </div>
+                  <div className={`text-xs font-mono flex items-center justify-end ${data.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
+                  </div>
                 </div>
+              </button>
+              <div className="flex gap-2 mt-1">
+                <button className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                  Buy
+                </button>
+                <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                  Sell
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </div>
@@ -543,7 +658,7 @@ function StrategyBuilderView() {
 }
 
 // --- Portfolio View Component ---
-function PortfolioView() {
+function PortfolioView({ holdingsData }: { holdingsData: any[] }) {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-10">
       <h1 className="text-2xl font-bold tracking-tight mb-6">Portfolio Holdings</h1>
