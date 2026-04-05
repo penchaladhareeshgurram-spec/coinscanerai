@@ -4,7 +4,7 @@ import {
   TrendingUp, TrendingDown, Zap, Bell, Search,
   Play, Square, AlertTriangle, GitBranch, Plus, Save, PlayCircle, X,
   Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight,
-  Layers, Eye, Cpu, Target, Crosshair
+  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -13,6 +13,9 @@ import {
 import { Aurora } from './components/Aurora';
 import SplitText from './components/SplitText';
 import { EvilEye } from './components/EvilEye';
+import { useDeltaExchange } from './hooks/useDeltaExchange';
+import { CandlestickChart } from './components/CandlestickChart';
+import { useAITradingEngine } from './hooks/useAITradingEngine';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -33,10 +36,10 @@ const generateHistory = (basePrice: number, volatility: number, count: number) =
 const initialMarketsData = {
   'BTC/USD': { name: 'Bitcoin', price: 65100.20, change: 2.4, history: generateHistory(65100, 50, 60), liquidity: 2450000000, spread: 0.01 },
   'ETH/USD': { name: 'Ethereum', price: 3420.10, change: 1.8, history: generateHistory(3420, 5, 60), liquidity: 1200000000, spread: 0.02 },
-  'S&P 500': { name: 'S&P 500 Index', price: 5120.50, change: -0.5, history: generateHistory(5120, 2, 60), liquidity: 8500000000, spread: 0.01 },
-  'GOLD': { name: 'Gold Ounce', price: 2340.80, change: 0.2, history: generateHistory(2340, 1, 60), liquidity: 500000000, spread: 0.05 },
-  'AAPL': { name: 'Apple Inc.', price: 174.80, change: -0.22, history: generateHistory(175, 0.5, 60), liquidity: 3200000000, spread: 0.01 },
-  'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.27, history: generateHistory(1.0850, 0.001, 60), liquidity: 15000000000, spread: 0.005 },
+  'SOL/USD': { name: 'Solana', price: 145.50, change: 5.2, history: generateHistory(145, 2, 60), liquidity: 850000000, spread: 0.05 },
+  'XRP/USD': { name: 'Ripple', price: 0.62, change: 1.1, history: generateHistory(0.62, 0.01, 60), liquidity: 500000000, spread: 0.1 },
+  'BNB/USD': { name: 'Binance Coin', price: 580.20, change: -0.5, history: generateHistory(580, 2, 60), liquidity: 620000000, spread: 0.03 },
+  'ADA/USD': { name: 'Cardano', price: 0.45, change: 0.8, history: generateHistory(0.45, 0.005, 60), liquidity: 300000000, spread: 0.15 },
 };
 
 const initialPerformanceData = [
@@ -120,6 +123,22 @@ export default function App() {
   const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
   const [performanceData, setPerformanceData] = useState(initialPerformanceData);
 
+  const { prices, orderbook, trades } = useDeltaExchange();
+  const pricesRef = useRef(prices);
+  
+  useEffect(() => {
+    pricesRef.current = prices;
+  }, [prices]);
+
+  const { aiLogs } = useAITradingEngine(
+    botActive,
+    prices,
+    orderbook,
+    activeTrades,
+    setActiveTrades,
+    isDemoMode ? setDemoBalance : setLiveBalance
+  );
+
   const handleManualTrade = (asset: string, type: 'LONG' | 'SHORT') => {
     const market = marketsData[asset as keyof typeof marketsData];
     if (!market) return;
@@ -174,16 +193,16 @@ export default function App() {
         const newData = { ...prev };
         Object.keys(newData).forEach(key => {
           const market = newData[key as keyof typeof newData];
-          const lastPrice = market.price;
-          let volatility = 1;
-          if (key === 'BTC/USD') volatility = 40;
-          if (key === 'ETH/USD') volatility = 5;
-          if (key === 'S&P 500') volatility = 2;
-          if (key === 'EUR/USD') volatility = 0.0005;
+          
+          let newPrice = market.price;
+          const deltaSymbol = key.replace('/', '') + 'T'; // BTC/USD -> BTCUSDT
+          
+          if (pricesRef.current[deltaSymbol]) {
+            newPrice = pricesRef.current[deltaSymbol];
+          }
 
-          const change = (Math.random() - 0.5) * volatility;
-          const newPrice = Number((lastPrice + change).toFixed(key === 'EUR/USD' ? 4 : 2));
-          const newChangePct = Number((market.change + (change / lastPrice) * 10).toFixed(2));
+          const initialPrice = initialMarketsData[key as keyof typeof initialMarketsData].price;
+          const newChangePct = Number((((newPrice - initialPrice) / initialPrice) * 100).toFixed(2));
 
           const newHistory = [...market.history.slice(1), {
             time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
@@ -196,7 +215,7 @@ export default function App() {
         });
         return newData;
       });
-    }, 2000);
+    }, 10000); // 10 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -404,6 +423,30 @@ export default function App() {
     );
   }
 
+  const currentOrderBook = orderbook['BTCUSDT'] ? {
+    bids: orderbook['BTCUSDT'].bids.map((b: any, i: number, arr: any[]) => {
+      const size = parseFloat(b.size);
+      const total = arr.slice(0, i + 1).reduce((sum, item) => sum + parseFloat(item.size), 0);
+      return { price: parseFloat(b.limit_price), size, total };
+    }),
+    asks: orderbook['BTCUSDT'].asks.map((a: any, i: number, arr: any[]) => {
+      const size = parseFloat(a.size);
+      const total = arr.slice(0, i + 1).reduce((sum, item) => sum + parseFloat(item.size), 0);
+      return { price: parseFloat(a.limit_price), size, total };
+    })
+  } : initialOrderBook;
+
+  const currentWhales = trades.length > 0 ? trades.map((t: any, i: number) => ({
+    id: `W-${t.id || i}`,
+    time: new Date(t.timestamp / 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+    asset: t.symbol === 'BTCUSDT' ? 'BTC/USD' : t.symbol === 'ETHUSDT' ? 'ETH/USD' : t.symbol,
+    type: t.side === 'buy' ? 'BUY' : 'SELL',
+    amount: `${t.size} ${t.symbol.replace('USDT', '')}`,
+    value: `$${(parseFloat(t.size) * parseFloat(t.price)).toLocaleString(undefined, {maximumFractionDigits: 0})}`,
+    exchange: 'Delta',
+    icon: t.side === 'buy' ? <ArrowUpRight className="w-4 h-4 text-emerald-500"/> : <ArrowDownRight className="w-4 h-4 text-red-500"/>
+  })) : initialWhales;
+
   if (!isAuthenticated) {
     return <AuthView onLogin={() => setIsAuthenticated(true)} />;
   }
@@ -420,7 +463,6 @@ export default function App() {
         <nav className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto">
           <NavItem icon={<Activity />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <NavItem icon={<BarChart2 />} label="Markets" active={activeTab === 'markets'} onClick={() => setActiveTab('markets')} />
-          <NavItem icon={<Layers />} label="Liquidity & Depth" active={activeTab === 'liquidity'} onClick={() => setActiveTab('liquidity')} />
           <NavItem icon={<Eye />} label="Whale Tracker" active={activeTab === 'whales'} onClick={() => setActiveTab('whales')} />
           <NavItem icon={<GitBranch />} label="Strategy Builder" active={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')} />
           <NavItem icon={<Briefcase />} label="Portfolio" active={activeTab === 'portfolio'} onClick={() => setActiveTab('portfolio')} />
@@ -515,10 +557,9 @@ export default function App() {
 
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
-          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} />}
+          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
           {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} />}
-          {activeTab === 'liquidity' && <LiquidityView marketsData={marketsData} orderBook={initialOrderBook} />}
-          {activeTab === 'whales' && <WhaleTrackerView whales={initialWhales} />}
+          {activeTab === 'whales' && <WhaleTrackerView whales={currentWhales} />}
           {activeTab === 'strategy' && <StrategyBuilderView />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
           {activeTab === 'risk' && <RiskManagementView />}
@@ -530,11 +571,114 @@ export default function App() {
 }
 
 // --- Dashboard View Component ---
-function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void }) {
+function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade, aiLogs }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, aiLogs: any[] }) {
   const currentBalance = isDemoMode ? demoBalance : liveBalance;
+  const [logFilter, setLogFilter] = useState<'ALL' | 'TRADE' | 'RISK' | 'INFO'>('ALL');
   
+  // Format history for Candlestick chart
+  const btcHistory = marketsData['BTC/USD']?.history.map((h: any, i: number, arr: any[]) => {
+    const prevPrice = i > 0 ? arr[i-1].price : h.price;
+    const open = prevPrice;
+    const close = h.price;
+    const high = Math.max(open, close) + (Math.random() * 50);
+    const low = Math.min(open, close) - (Math.random() * 50);
+    
+    // Create a valid timestamp (seconds) for lightweight-charts
+    // Start from current time minus (length - i) * 10 seconds
+    const now = Math.floor(Date.now() / 1000);
+    const time = now - ((arr.length - i) * 10);
+    
+    return {
+      time,
+      open,
+      high,
+      low,
+      close
+    };
+  }) || [];
+
+  const filteredLogs = aiLogs.filter(log => logFilter === 'ALL' || log.type === logFilter);
+
+  const getLogIcon = (type: string) => {
+    switch(type) {
+      case 'TRADE': return <Activity className="w-3.5 h-3.5" />;
+      case 'RISK': return <AlertTriangle className="w-3.5 h-3.5" />;
+      case 'INFO': return <Info className="w-3.5 h-3.5" />;
+      default: return <Info className="w-3.5 h-3.5" />;
+    }
+  };
+
+  const getLogColor = (type: string) => {
+    switch(type) {
+      case 'TRADE': return 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20';
+      case 'RISK': return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20';
+      case 'INFO': return 'text-[#A3A3A3] bg-[#1A1A1A] border-[#262626]';
+      default: return 'text-[#A3A3A3] bg-[#1A1A1A] border-[#262626]';
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 pb-10">
+      {/* AI Market Analysis & Candlestick */}
+      <div className="panel p-6 border border-emerald-500/20">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-emerald-500" />
+            <h2 className="text-lg font-bold">AI Liquidity Engine (BTC/USD)</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#A3A3A3]">Status:</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded ${botActive ? 'bg-emerald-500/20 text-emerald-500' : 'bg-red-500/20 text-red-500'}`}>
+              {botActive ? 'ANALYZING' : 'OFFLINE'}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col lg:flex-row gap-6 h-[400px]">
+          <div className="flex-1 bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#262626]">
+            <CandlestickChart data={btcHistory} currentPrice={marketsData['BTC/USD']?.price} />
+          </div>
+          <div className="w-full lg:w-1/3 flex flex-col bg-[#0A0A0A] rounded-lg border border-[#262626] font-mono text-xs overflow-hidden">
+            <div className="flex items-center justify-between p-3 border-b border-[#262626] bg-[#141414]">
+              <h3 className="text-[#A3A3A3] font-semibold flex items-center gap-2">
+                <Terminal className="w-4 h-4" /> ENGINE LOGS
+              </h3>
+              <div className="flex items-center gap-1">
+                <Filter className="w-3 h-3 text-[#A3A3A3] mr-1" />
+                {['ALL', 'TRADE', 'RISK', 'INFO'].map(f => (
+                  <button 
+                    key={f}
+                    onClick={() => setLogFilter(f as any)}
+                    className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${logFilter === f ? 'bg-[#262626] text-white' : 'text-[#525252] hover:text-[#A3A3A3]'}`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {filteredLogs.length === 0 ? (
+                <div className="text-[#525252] italic text-center mt-4">No logs matching filter...</div>
+              ) : (
+                filteredLogs.map((log, i) => (
+                  <div key={log.id} className={`flex flex-col gap-1.5 p-2.5 rounded border ${getLogColor(log.type)}`}>
+                    <div className="flex items-center justify-between opacity-80">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        {getLogIcon(log.type)}
+                        <span>{log.type}</span>
+                      </div>
+                      <span className="text-[10px] opacity-70">{log.time}</span>
+                    </div>
+                    <div className="text-[11px] leading-relaxed opacity-90">
+                      {log.message}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Portfolio Summary */}
         <div className="panel flex-1 p-6">
@@ -715,6 +859,25 @@ function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManua
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
 
+  const marketHistory = market.history.map((h: any, i: number, arr: any[]) => {
+    const prevPrice = i > 0 ? arr[i-1].price : h.price;
+    const open = prevPrice;
+    const close = h.price;
+    const high = Math.max(open, close) + (Math.random() * (selectedMarket.includes('USD') ? 10 : 1));
+    const low = Math.min(open, close) - (Math.random() * (selectedMarket.includes('USD') ? 10 : 1));
+    
+    const now = Math.floor(Date.now() / 1000);
+    const time = now - ((arr.length - i) * 10);
+
+    return {
+      time,
+      open,
+      high,
+      low,
+      close
+    };
+  });
+
   return (
     <div className="flex flex-col md:flex-row gap-6 h-full min-h-[600px] pb-10">
       <div className="panel w-full md:w-80 flex flex-col shrink-0 overflow-hidden h-[600px] md:h-auto">
@@ -794,21 +957,7 @@ function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManua
         </div>
 
         <div className="flex-1 p-6">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={market.history}>
-              <defs>
-                <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={isPositive ? '#10B981' : '#EF4444'} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={isPositive ? '#10B981' : '#EF4444'} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
-              <XAxis dataKey="time" stroke="#A3A3A3" fontSize={12} tickLine={false} axisLine={false} minTickGap={30} />
-              <YAxis stroke="#A3A3A3" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val.toLocaleString()}`} domain={['auto', 'auto']} width={80} orientation="right" />
-              <Tooltip contentStyle={{ backgroundColor: '#141414', borderColor: '#262626', borderRadius: '8px' }} itemStyle={{ color: isPositive ? '#10B981' : '#EF4444', fontFamily: 'JetBrains Mono' }} labelStyle={{ color: '#A3A3A3', marginBottom: '4px' }} />
-              <Area type="monotone" dataKey="price" stroke={isPositive ? '#10B981' : '#EF4444'} strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" isAnimationActive={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <CandlestickChart data={marketHistory} currentPrice={market.price} />
         </div>
       </div>
     </div>
@@ -1290,102 +1439,6 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
 }
 
 // --- New Components ---
-
-function LiquidityView({ marketsData, orderBook }: { marketsData: any, orderBook: any }) {
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Liquidity & Depth</h1>
-        <div className="flex gap-2">
-          <select className="bg-[#1A1A1A] border border-[#262626] rounded px-3 py-1.5 text-sm outline-none focus:border-blue-500">
-            <option>BTC/USD</option>
-            <option>ETH/USD</option>
-            <option>SOL/USD</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Order Book Table */}
-        <div className="panel col-span-1 flex flex-col h-[600px]">
-          <div className="p-4 border-b border-[#262626]">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Order Book (L2)</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 font-mono text-sm">
-            <div className="grid grid-cols-3 text-[#737373] text-xs mb-2 px-2">
-              <div>Price</div>
-              <div className="text-right">Size</div>
-              <div className="text-right">Total</div>
-            </div>
-            
-            {/* Asks (Sells) */}
-            <div className="flex flex-col-reverse mb-4">
-              {orderBook.asks.map((ask: any, i: number) => (
-                <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group">
-                  <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 z-0" style={{ width: `${(ask.total / 70) * 100}%` }}></div>
-                  <div className="text-red-500 z-10">{ask.price.toFixed(2)}</div>
-                  <div className="text-right z-10">{ask.size.toFixed(2)}</div>
-                  <div className="text-right z-10">{ask.total.toFixed(2)}</div>
-                </div>
-              ))}
-            </div>
-            
-            {/* Spread */}
-            <div className="py-2 text-center border-y border-[#262626] text-[#A3A3A3] text-xs flex justify-center items-center gap-4">
-              <span>Spread: ${(orderBook.asks[0].price - orderBook.bids[0].price).toFixed(2)}</span>
-              <span>Mark: $65,100.25</span>
-            </div>
-
-            {/* Bids (Buys) */}
-            <div className="mt-4">
-              {orderBook.bids.map((bid: any, i: number) => (
-                <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group">
-                  <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/10 z-0" style={{ width: `${(bid.total / 60) * 100}%` }}></div>
-                  <div className="text-emerald-500 z-10">{bid.price.toFixed(2)}</div>
-                  <div className="text-right z-10">{bid.size.toFixed(2)}</div>
-                  <div className="text-right z-10">{bid.total.toFixed(2)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Depth Chart */}
-        <div className="panel col-span-1 lg:col-span-2 flex flex-col h-[600px]">
-          <div className="p-4 border-b border-[#262626] flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Depth Chart & Liquidity Walls</h2>
-          </div>
-          <div className="flex-1 p-4 flex items-center justify-center relative">
-            {/* Mocking a depth chart visually for the dashboard */}
-            <div className="absolute inset-0 p-8 flex items-end">
-               <div className="w-1/2 h-full flex items-end justify-end border-b border-[#262626]">
-                  {/* Bids Area */}
-                  <div className="w-full h-[30%] bg-emerald-500/20 border-t border-emerald-500 relative">
-                     <div className="absolute right-[20%] bottom-0 w-[10%] h-[150%] bg-emerald-500/40 border-t border-emerald-500 flex items-start justify-center">
-                        <span className="text-[10px] text-emerald-500 -mt-5 bg-[#0A0A0A] px-1">Buy Wall (65k)</span>
-                     </div>
-                  </div>
-               </div>
-               <div className="w-1/2 h-full flex items-end justify-start border-b border-[#262626]">
-                  {/* Asks Area */}
-                  <div className="w-full h-[40%] bg-red-500/20 border-t border-red-500 relative">
-                     <div className="absolute left-[30%] bottom-0 w-[15%] h-[180%] bg-red-500/40 border-t border-red-500 flex items-start justify-center">
-                        <span className="text-[10px] text-red-500 -mt-5 bg-[#0A0A0A] px-1">Sell Wall (65.2k)</span>
-                     </div>
-                  </div>
-               </div>
-            </div>
-            <div className="absolute bottom-2 left-0 right-0 flex justify-between px-8 text-xs text-[#737373] font-mono">
-              <span>64,500</span>
-              <span>65,100</span>
-              <span>65,500</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function WhaleTrackerView({ whales }: { whales: any[] }) {
   return (
