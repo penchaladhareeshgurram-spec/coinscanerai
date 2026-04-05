@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Aurora } from './components/Aurora';
 import SplitText from './components/SplitText';
+import { EvilEye } from './components/EvilEye';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -367,22 +368,38 @@ export default function App() {
 
   if (showIntro) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans">
-        <SplitText
-          text={`Hello, you! ,\n Welcome to coin scanner`}
-          className="text-4xl md:text-5xl font-semibold text-center leading-tight"
-          delay={130}
-          duration={1.25}
-          ease="elastic.out(1, 0.3)"
-          splitType="chars"
-          from={{ opacity: 0, y: 40 }}
-          to={{ opacity: 1, y: 0 }}
-          threshold={0.1}
-          rootMargin="-100px"
-          textAlign="center"
-          onLetterAnimationComplete={handleAnimationComplete}
-          showCallback
-        />
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          <EvilEye
+            eyeColor="#FF6F37"
+            intensity={2}
+            pupilSize={0.6}
+            irisWidth={0.4}
+            glowIntensity={0.15}
+            scale={0.8}
+            noiseScale={1.5}
+            pupilFollow={1}
+            flameSpeed={1}
+            backgroundColor="#000000"
+          />
+        </div>
+        <div className="relative z-10 pointer-events-none">
+          <SplitText
+            text={`Hello, you! ,\n Welcome to coin scanner`}
+            className="text-4xl md:text-5xl font-semibold text-center leading-tight drop-shadow-2xl"
+            delay={130}
+            duration={1.25}
+            ease="elastic.out(1, 0.3)"
+            splitType="chars"
+            from={{ opacity: 0, y: 40 }}
+            to={{ opacity: 1, y: 0 }}
+            threshold={0.1}
+            rootMargin="-100px"
+            textAlign="center"
+            onLetterAnimationComplete={handleAnimationComplete}
+            showCallback
+          />
+        </div>
       </div>
     );
   }
