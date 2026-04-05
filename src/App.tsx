@@ -3,12 +3,15 @@ import {
   Activity, BarChart2, Briefcase, Settings, Shield, 
   TrendingUp, TrendingDown, Zap, Bell, Search,
   Play, Square, AlertTriangle, GitBranch, Plus, Save, PlayCircle, X,
-  Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight
+  Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight,
+  Layers, Eye, Cpu, Target, Crosshair
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
+import { Aurora } from './components/Aurora';
+import SplitText from './components/SplitText';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -27,12 +30,12 @@ const generateHistory = (basePrice: number, volatility: number, count: number) =
 };
 
 const initialMarketsData = {
-  'BTC/USD': { name: 'Bitcoin', price: 65100.20, change: 2.4, history: generateHistory(65100, 50, 60) },
-  'ETH/USD': { name: 'Ethereum', price: 3420.10, change: 1.8, history: generateHistory(3420, 5, 60) },
-  'S&P 500': { name: 'S&P 500 Index', price: 5120.50, change: -0.5, history: generateHistory(5120, 2, 60) },
-  'GOLD': { name: 'Gold Ounce', price: 2340.80, change: 0.2, history: generateHistory(2340, 1, 60) },
-  'AAPL': { name: 'Apple Inc.', price: 174.80, change: -0.22, history: generateHistory(175, 0.5, 60) },
-  'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.27, history: generateHistory(1.0850, 0.001, 60) },
+  'BTC/USD': { name: 'Bitcoin', price: 65100.20, change: 2.4, history: generateHistory(65100, 50, 60), liquidity: 2450000000, spread: 0.01 },
+  'ETH/USD': { name: 'Ethereum', price: 3420.10, change: 1.8, history: generateHistory(3420, 5, 60), liquidity: 1200000000, spread: 0.02 },
+  'S&P 500': { name: 'S&P 500 Index', price: 5120.50, change: -0.5, history: generateHistory(5120, 2, 60), liquidity: 8500000000, spread: 0.01 },
+  'GOLD': { name: 'Gold Ounce', price: 2340.80, change: 0.2, history: generateHistory(2340, 1, 60), liquidity: 500000000, spread: 0.05 },
+  'AAPL': { name: 'Apple Inc.', price: 174.80, change: -0.22, history: generateHistory(175, 0.5, 60), liquidity: 3200000000, spread: 0.01 },
+  'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.27, history: generateHistory(1.0850, 0.001, 60), liquidity: 15000000000, spread: 0.005 },
 };
 
 const initialPerformanceData = [
@@ -62,19 +65,101 @@ const initialHoldingsData = [
   { asset: 'US Dollar', symbol: 'USD', amount: '21435.99', value: 21435.99, allocation: 20.4, pnl: '0.0%' },
 ];
 
+const initialOrderBook = {
+  bids: [
+    { price: 65090.50, size: 2.5, total: 2.5 },
+    { price: 65085.00, size: 1.2, total: 3.7 },
+    { price: 65080.20, size: 4.8, total: 8.5 },
+    { price: 65050.00, size: 15.0, total: 23.5 }, // Liquidity Wall
+    { price: 65020.00, size: 3.2, total: 26.7 },
+    { price: 65000.00, size: 25.5, total: 52.2 }, // Major Support
+    { price: 64950.00, size: 5.0, total: 57.2 },
+  ],
+  asks: [
+    { price: 65110.00, size: 1.5, total: 1.5 },
+    { price: 65115.50, size: 3.2, total: 4.7 },
+    { price: 65125.00, size: 2.1, total: 6.8 },
+    { price: 65150.00, size: 18.5, total: 25.3 }, // Liquidity Wall
+    { price: 65180.00, size: 4.0, total: 29.3 },
+    { price: 65200.00, size: 30.0, total: 59.3 }, // Major Resistance
+    { price: 65250.00, size: 6.5, total: 65.8 },
+  ]
+};
+
+const initialWhales = [
+  { id: 'W-1', time: '10:42:05', asset: 'BTC/USD', type: 'BUY', amount: '125.5 BTC', value: '$8,168,800', exchange: 'Binance', icon: <ArrowUpRight className="w-4 h-4 text-emerald-500"/> },
+  { id: 'W-2', time: '10:41:12', asset: 'ETH/USD', type: 'SELL', amount: '2,500 ETH', value: '$8,550,250', exchange: 'Coinbase', icon: <ArrowDownRight className="w-4 h-4 text-red-500"/> },
+  { id: 'W-3', time: '10:38:45', asset: 'BTC/USD', type: 'LIQUIDATION', amount: '45.2 BTC', value: '$2,942,520', exchange: 'Bybit', icon: <AlertTriangle className="w-4 h-4 text-yellow-500"/> },
+  { id: 'W-4', time: '10:35:20', asset: 'SOL/USD', type: 'BUY', amount: '50,000 SOL', value: '$7,250,000', exchange: 'Binance', icon: <ArrowUpRight className="w-4 h-4 text-emerald-500"/> },
+  { id: 'W-5', time: '10:30:00', asset: 'BTC/USD', type: 'SELL', amount: '300.0 BTC', value: '$19,530,000', exchange: 'Bitfinex', icon: <ArrowDownRight className="w-4 h-4 text-red-500"/> },
+];
+
+const initialAiSignals = [
+  { id: 'S-1', asset: 'BTC/USD', type: 'LONG', probability: 87, target: 65500, stop: 64800, reason: 'Liquidity sweep at 65k support completed. Order flow momentum shifting positive.' },
+  { id: 'S-2', asset: 'ETH/USD', type: 'SHORT', probability: 72, target: 3350, stop: 3480, reason: 'Large sell wall detected at 3450. Whale distribution pattern identified.' },
+  { id: 'S-3', asset: 'SOL/USD', type: 'LONG', probability: 91, target: 155, stop: 142, reason: 'Liquidity gap detected between 145-150. High probability of rapid fill.' },
+];
+
 // --- Main App Component ---
 export default function App() {
+  const [showIntro, setShowIntro] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [botActive, setBotActive] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [demoBalance, setDemoBalance] = useState(100000);
+  const [liveBalance, setLiveBalance] = useState(0);
+
   const [marketsData, setMarketsData] = useState(initialMarketsData);
   const [activeTrades, setActiveTrades] = useState(initialActiveTrades);
   const [holdingsData, setHoldingsData] = useState(initialHoldingsData);
   const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
   const [performanceData, setPerformanceData] = useState(initialPerformanceData);
+
+  const handleManualTrade = (asset: string, type: 'LONG' | 'SHORT') => {
+    const market = marketsData[asset as keyof typeof marketsData];
+    if (!market) return;
+
+    const tradeAmount = 5000; // Fixed amount for manual trades for now
+    const currentBalance = isDemoMode ? demoBalance : liveBalance;
+    
+    if (currentBalance < tradeAmount) {
+      alert("Insufficient balance");
+      return;
+    }
+
+    if (isDemoMode) {
+      setDemoBalance(prev => prev - tradeAmount);
+    } else {
+      setLiveBalance(prev => prev - tradeAmount);
+    }
+
+    const newTrade = {
+      id: `TRD-${Math.floor(Math.random() * 10000)}`,
+      asset: asset,
+      type: type,
+      entry: market.price,
+      current: market.price,
+      pnl: '+0.00%',
+      pnlVal: 0.00,
+      risk: 'Manual',
+      maxPnl: 0
+    };
+
+    setActiveTrades(prev => [newTrade, ...prev]);
+    
+    setNotificationsData(nPrev => [{
+      id: Date.now(),
+      type: type === 'LONG' ? 'BUY' : 'SELL',
+      asset: asset,
+      price: `$${market.price.toLocaleString()}`,
+      time: 'Just now',
+      msg: `Manual ${type} position executed on ${asset}.`
+    }, ...nPrev].slice(0, 20));
+  };
 
   const marketsDataRef = useRef(marketsData);
   useEffect(() => {
@@ -150,51 +235,114 @@ export default function App() {
     const interval = setInterval(() => {
       const currentMarkets = marketsDataRef.current;
       const assets = Object.keys(currentMarkets) as Array<keyof typeof initialMarketsData>;
-      const randomAsset = assets[Math.floor(Math.random() * assets.length)];
-      const market = currentMarkets[randomAsset];
       
       setActiveTrades(prev => {
         let newTrades = [...prev];
-        if (newTrades.length >= 8) {
-          const closedTrade = newTrades.pop();
-          if (closedTrade) {
-            setNotificationsData(nPrev => [{
-              id: Date.now() + 1,
-              type: 'SELL',
-              asset: closedTrade.asset,
-              price: `$${closedTrade.current.toLocaleString()}`,
-              time: 'Just now',
-              msg: `AI closed ${closedTrade.type} position. PNL: ${closedTrade.pnl}`
-            }, ...nPrev].slice(0, 20));
-          }
+        
+        // 1. Evaluate existing trades to close them if conditions are met (e.g., take profit or stop loss)
+        const tradesToKeep = [];
+        for (let trade of newTrades) {
+            // Ignore manual trades for AI logic
+            if (trade.risk === 'Manual') {
+                tradesToKeep.push(trade);
+                continue;
+            }
+
+            const market = currentMarkets[trade.asset as keyof typeof initialMarketsData];
+            if (!market) {
+                tradesToKeep.push(trade);
+                continue;
+            }
+            
+            const pnlPct = trade.type === 'LONG' 
+              ? ((market.price - trade.entry) / trade.entry) * 100 
+              : ((trade.entry - market.price) / trade.entry) * 100;
+              
+            // Track maximum PNL for trailing stop
+            const currentMaxPnl = Math.max((trade as any).maxPnl || 0, pnlPct);
+            trade = { ...trade, maxPnl: currentMaxPnl } as any;
+
+            // Volatility factor based on recent price change magnitude
+            const volatilityFactor = 1 + (Math.abs(market.change) / 2); // e.g., 2% change = 2x volatility factor
+
+            // Dynamic Take Profit & Stop Loss
+            const dynamicTP = 1.5 * volatilityFactor;
+            const baseSL = -0.5 * volatilityFactor;
+            
+            // Trailing Stop Loss: Lock in gains if maxPnl is high enough
+            // e.g., if maxPnl is 2.0%, trailing SL might be 2.0% - 0.8% = 1.2%
+            const trailingDistance = 0.8 * volatilityFactor;
+            const dynamicSL = currentMaxPnl > 1.0 
+                ? Math.max(baseSL, currentMaxPnl - trailingDistance) 
+                : baseSL;
+              
+            if (pnlPct >= dynamicTP || pnlPct <= dynamicSL) {
+                const isProfit = pnlPct > 0;
+                const reason = pnlPct >= dynamicTP 
+                    ? 'Dynamic take profit hit' 
+                    : (currentMaxPnl > 1.0 && pnlPct <= dynamicSL && isProfit 
+                        ? 'Trailing stop secured profit' 
+                        : 'Dynamic stop loss triggered');
+                
+                setNotificationsData(nPrev => [{
+                  id: Date.now() + Math.random(),
+                  type: 'SELL',
+                  asset: trade.asset,
+                  price: `$${market.price.toLocaleString()}`,
+                  time: 'Just now',
+                  msg: `AI closed ${trade.type} position. ${reason} (${pnlPct.toFixed(2)}%).`
+                }, ...nPrev].slice(0, 20));
+            } else {
+                tradesToKeep.push(trade);
+            }
         }
         
-        const isLong = Math.random() > 0.3;
-        const type = isLong ? 'LONG' : 'SHORT';
-        
-        const newTrade = {
-          id: `TRD-${Math.floor(Math.random() * 10000)}`,
-          asset: randomAsset,
-          type: type,
-          entry: market.price,
-          current: market.price,
-          pnl: '+0.00%',
-          pnlVal: 0.00,
-          risk: '1.0%'
-        };
-        
-        setNotificationsData(nPrev => [{
-          id: Date.now(),
-          type: type === 'LONG' ? 'BUY' : 'SELL',
-          asset: randomAsset,
-          price: `$${market.price.toLocaleString()}`,
-          time: 'Just now',
-          msg: `AI executed ${type} position on ${randomAsset}.`
-        }, ...nPrev].slice(0, 20));
+        newTrades = tradesToKeep;
 
-        return [newTrade, ...newTrades];
+        // 2. Look for new opportunities based on liquidity and price drops
+        if (newTrades.length < 8) { // Max 8 active trades
+            const randomAsset = assets[Math.floor(Math.random() * assets.length)];
+            const market = currentMarkets[randomAsset];
+            
+            // Check if we don't already have an AI trade for this asset
+            const hasTrade = newTrades.some(t => t.asset === randomAsset && t.risk !== 'Manual');
+            
+            if (!hasTrade) {
+                // Check liquidity (must be > 1B for AI to trade)
+                if (market.liquidity > 1000000000) {
+                    // Simple logic: if change is negative, buy the dip. If positive, short the top.
+                    const isLong = market.change < 0; 
+                    const type = isLong ? 'LONG' : 'SHORT';
+                    
+                    const newTrade = {
+                      id: `TRD-${Math.floor(Math.random() * 10000)}`,
+                      asset: randomAsset,
+                      type: type,
+                      entry: market.price,
+                      current: market.price,
+                      pnl: '+0.00%',
+                      pnlVal: 0.00,
+                      risk: '1.0%',
+                      maxPnl: 0
+                    };
+                    
+                    setNotificationsData(nPrev => [{
+                      id: Date.now(),
+                      type: type === 'LONG' ? 'BUY' : 'SELL',
+                      asset: randomAsset,
+                      price: `$${market.price.toLocaleString()}`,
+                      time: 'Just now',
+                      msg: `AI executed ${type} position on ${randomAsset} due to high liquidity and price action.`
+                    }, ...nPrev].slice(0, 20));
+
+                    newTrades.unshift(newTrade);
+                }
+            }
+        }
+
+        return newTrades;
       });
-    }, 4000); // AI acts every 4 seconds
+    }, 4000); // AI evaluates every 4 seconds
 
     return () => clearInterval(interval);
   }, [botActive]);
@@ -209,6 +357,35 @@ export default function App() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleAnimationComplete = () => {
+    console.log('All letters have animated!');
+    setTimeout(() => {
+      setShowIntro(false);
+    }, 1000);
+  };
+
+  if (showIntro) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans">
+        <SplitText
+          text={`Hello, you! ,\n Welcome to coin scanner`}
+          className="text-4xl md:text-5xl font-semibold text-center leading-tight"
+          delay={130}
+          duration={1.25}
+          ease="elastic.out(1, 0.3)"
+          splitType="chars"
+          from={{ opacity: 0, y: 40 }}
+          to={{ opacity: 1, y: 0 }}
+          threshold={0.1}
+          rootMargin="-100px"
+          textAlign="center"
+          onLetterAnimationComplete={handleAnimationComplete}
+          showCallback
+        />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <AuthView onLogin={() => setIsAuthenticated(true)} />;
@@ -226,6 +403,8 @@ export default function App() {
         <nav className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto">
           <NavItem icon={<Activity />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <NavItem icon={<BarChart2 />} label="Markets" active={activeTab === 'markets'} onClick={() => setActiveTab('markets')} />
+          <NavItem icon={<Layers />} label="Liquidity & Depth" active={activeTab === 'liquidity'} onClick={() => setActiveTab('liquidity')} />
+          <NavItem icon={<Eye />} label="Whale Tracker" active={activeTab === 'whales'} onClick={() => setActiveTab('whales')} />
           <NavItem icon={<GitBranch />} label="Strategy Builder" active={activeTab === 'strategy'} onClick={() => setActiveTab('strategy')} />
           <NavItem icon={<Briefcase />} label="Portfolio" active={activeTab === 'portfolio'} onClick={() => setActiveTab('portfolio')} />
           <NavItem icon={<Shield />} label="Risk Management" active={activeTab === 'risk'} onClick={() => setActiveTab('risk')} />
@@ -258,6 +437,22 @@ export default function App() {
           <div className="sm:hidden"></div>
           
           <div className="flex items-center gap-4">
+            {/* Demo Mode Toggle */}
+            <div className="flex items-center bg-[#1A1A1A] border border-[#262626] rounded-lg p-1 shrink-0">
+              <button 
+                onClick={() => setIsDemoMode(false)}
+                className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${!isDemoMode ? 'bg-emerald-500/20 text-emerald-400' : 'text-[#A3A3A3] hover:text-white'}`}
+              >
+                Live
+              </button>
+              <button 
+                onClick={() => setIsDemoMode(true)}
+                className={`flex items-center px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isDemoMode ? 'bg-blue-500/20 text-blue-400' : 'text-[#A3A3A3] hover:text-white'}`}
+              >
+                Demo
+              </button>
+            </div>
+
             {/* Notifications Dropdown */}
             <div className="relative" ref={notifRef}>
               <button 
@@ -303,8 +498,10 @@ export default function App() {
 
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
-          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} />}
-          {activeTab === 'markets' && <MarketsView marketsData={marketsData} />}
+          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} />}
+          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} />}
+          {activeTab === 'liquidity' && <LiquidityView marketsData={marketsData} orderBook={initialOrderBook} />}
+          {activeTab === 'whales' && <WhaleTrackerView whales={initialWhales} />}
           {activeTab === 'strategy' && <StrategyBuilderView />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
           {activeTab === 'risk' && <RiskManagementView />}
@@ -316,7 +513,9 @@ export default function App() {
 }
 
 // --- Dashboard View Component ---
-function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any }) {
+function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void }) {
+  const currentBalance = isDemoMode ? demoBalance : liveBalance;
+  
   return (
     <div className="flex flex-col gap-6 pb-10">
       <div className="flex flex-col lg:flex-row gap-6">
@@ -324,8 +523,12 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
         <div className="panel flex-1 p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start mb-6 gap-4">
             <div>
-              <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-1">Total Balance</h2>
-              <div className="text-3xl md:text-4xl font-light tracking-tight font-mono">$105,500.00</div>
+              <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-1">
+                {isDemoMode ? 'Demo Balance' : 'Live Balance'}
+              </h2>
+              <div className="text-3xl md:text-4xl font-light tracking-tight font-mono">
+                ${currentBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
               <div className="flex items-center mt-2 text-emerald-500 text-sm font-medium">
                 <TrendingUp className="w-4 h-4 mr-1" />
                 <span>+$5,500.00 (5.5%) Today</span>
@@ -450,30 +653,34 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
           </div>
         </div>
 
-        {/* Market Overview */}
+        {/* AI Predictive Signals */}
         <div className="panel w-full xl:w-96 flex flex-col shrink-0">
-          <div className="p-4 border-b border-[#262626]">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Market Overview</h2>
+          <div className="p-4 border-b border-[#262626] flex justify-between items-center">
+            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider flex items-center">
+              <Cpu className="w-4 h-4 mr-2 text-blue-500" /> AI Signals
+            </h2>
+            <span className="flex items-center text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded animate-pulse">
+              LIVE
+            </span>
           </div>
-          <div className="flex-1 p-2">
-            {Object.entries(marketsData).slice(0, 4).map(([symbol, data]: [string, any]) => (
-              <div key={symbol} className="flex flex-col p-3 hover:bg-[#1A1A1A] rounded-lg transition-colors border-b border-[#262626] last:border-0">
-                <div className="flex items-center justify-between cursor-pointer mb-2">
-                  <div className="font-semibold text-sm">{symbol}</div>
-                  <div className="text-right">
-                    <div className="font-mono text-sm">${data.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                    <div className={`text-xs font-mono ${data.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                      {data.change >= 0 ? '+' : ''}{data.change.toFixed(2)}%
-                    </div>
+          <div className="flex-1 p-2 overflow-y-auto">
+            {initialAiSignals.map((signal) => (
+              <div key={signal.id} className="p-3 hover:bg-[#1A1A1A] rounded-lg transition-colors border-b border-[#262626] last:border-0">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm">{signal.asset}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${signal.type === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                      {signal.type}
+                    </span>
+                  </div>
+                  <div className="flex items-center text-xs font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                    <Target className="w-3 h-3 mr-1" /> {signal.probability}% Prob
                   </div>
                 </div>
-                <div className="flex gap-2 mt-1">
-                  <button className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
-                    Buy
-                  </button>
-                  <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
-                    Sell
-                  </button>
+                <p className="text-xs text-[#A3A3A3] leading-relaxed mb-2">{signal.reason}</p>
+                <div className="flex justify-between text-[10px] font-mono text-[#737373]">
+                  <span>Target: {signal.target}</span>
+                  <span>Stop: {signal.stop}</span>
                 </div>
               </div>
             ))}
@@ -485,7 +692,7 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
 }
 
 // --- Markets View Component (Live Updating) ---
-function MarketsView({ marketsData }: { marketsData: any }) {
+function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
@@ -518,10 +725,16 @@ function MarketsView({ marketsData }: { marketsData: any }) {
                 </div>
               </button>
               <div className="flex gap-2 mt-1">
-                <button className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                <button 
+                  onClick={() => onManualTrade(symbol, 'LONG')}
+                  className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/20 rounded py-1.5 text-xs font-semibold transition-colors"
+                >
                   Buy
                 </button>
-                <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded py-1.5 text-xs font-semibold transition-colors">
+                <button 
+                  onClick={() => onManualTrade(symbol, 'SHORT')}
+                  className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded py-1.5 text-xs font-semibold transition-colors"
+                >
                   Sell
                 </button>
               </div>
@@ -548,6 +761,10 @@ function MarketsView({ marketsData }: { marketsData: any }) {
                 {isPositive ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
                 {isPositive ? '+' : ''}{market.change.toFixed(2)}%
               </span>
+            </div>
+            <div className="flex items-center gap-4 mt-3 text-xs text-[#A3A3A3] font-mono">
+              <div>Liquidity: ${(market.liquidity / 1000000).toFixed(1)}M</div>
+              <div>Spread: {market.spread}%</div>
             </div>
           </div>
           <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626] self-start sm:self-auto">
@@ -929,7 +1146,15 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative">
+    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        <Aurora
+          colorStops={["#5227FF","#7cff67","#5227FF","#ffffff","#ae1e1e"]}
+          amplitude={1.4}
+          blend={0.5}
+        />
+      </div>
+      
       {/* Google Account Selection Modal */}
       {showGoogleAccounts && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -980,7 +1205,7 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
         </div>
       )}
 
-      <div className="w-full max-w-md bg-[#141414] border border-[#262626] rounded-2xl p-8 shadow-2xl">
+      <div className="w-full max-w-md bg-[#141414]/90 backdrop-blur-xl border border-[#262626] rounded-2xl p-8 shadow-2xl relative z-10">
         <div className="flex justify-center mb-8">
           <div className="flex items-center gap-2">
             <Zap className="w-8 h-8 text-emerald-500" />
@@ -1041,6 +1266,167 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
             </svg>
             Apple
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- New Components ---
+
+function LiquidityView({ marketsData, orderBook }: { marketsData: any, orderBook: any }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Liquidity & Depth</h1>
+        <div className="flex gap-2">
+          <select className="bg-[#1A1A1A] border border-[#262626] rounded px-3 py-1.5 text-sm outline-none focus:border-blue-500">
+            <option>BTC/USD</option>
+            <option>ETH/USD</option>
+            <option>SOL/USD</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Order Book Table */}
+        <div className="panel col-span-1 flex flex-col h-[600px]">
+          <div className="p-4 border-b border-[#262626]">
+            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Order Book (L2)</h2>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 font-mono text-sm">
+            <div className="grid grid-cols-3 text-[#737373] text-xs mb-2 px-2">
+              <div>Price</div>
+              <div className="text-right">Size</div>
+              <div className="text-right">Total</div>
+            </div>
+            
+            {/* Asks (Sells) */}
+            <div className="flex flex-col-reverse mb-4">
+              {orderBook.asks.map((ask: any, i: number) => (
+                <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group">
+                  <div className="absolute right-0 top-0 bottom-0 bg-red-500/10 z-0" style={{ width: `${(ask.total / 70) * 100}%` }}></div>
+                  <div className="text-red-500 z-10">{ask.price.toFixed(2)}</div>
+                  <div className="text-right z-10">{ask.size.toFixed(2)}</div>
+                  <div className="text-right z-10">{ask.total.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Spread */}
+            <div className="py-2 text-center border-y border-[#262626] text-[#A3A3A3] text-xs flex justify-center items-center gap-4">
+              <span>Spread: ${(orderBook.asks[0].price - orderBook.bids[0].price).toFixed(2)}</span>
+              <span>Mark: $65,100.25</span>
+            </div>
+
+            {/* Bids (Buys) */}
+            <div className="mt-4">
+              {orderBook.bids.map((bid: any, i: number) => (
+                <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group">
+                  <div className="absolute right-0 top-0 bottom-0 bg-emerald-500/10 z-0" style={{ width: `${(bid.total / 60) * 100}%` }}></div>
+                  <div className="text-emerald-500 z-10">{bid.price.toFixed(2)}</div>
+                  <div className="text-right z-10">{bid.size.toFixed(2)}</div>
+                  <div className="text-right z-10">{bid.total.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Depth Chart */}
+        <div className="panel col-span-1 lg:col-span-2 flex flex-col h-[600px]">
+          <div className="p-4 border-b border-[#262626] flex justify-between items-center">
+            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Depth Chart & Liquidity Walls</h2>
+          </div>
+          <div className="flex-1 p-4 flex items-center justify-center relative">
+            {/* Mocking a depth chart visually for the dashboard */}
+            <div className="absolute inset-0 p-8 flex items-end">
+               <div className="w-1/2 h-full flex items-end justify-end border-b border-[#262626]">
+                  {/* Bids Area */}
+                  <div className="w-full h-[30%] bg-emerald-500/20 border-t border-emerald-500 relative">
+                     <div className="absolute right-[20%] bottom-0 w-[10%] h-[150%] bg-emerald-500/40 border-t border-emerald-500 flex items-start justify-center">
+                        <span className="text-[10px] text-emerald-500 -mt-5 bg-[#0A0A0A] px-1">Buy Wall (65k)</span>
+                     </div>
+                  </div>
+               </div>
+               <div className="w-1/2 h-full flex items-end justify-start border-b border-[#262626]">
+                  {/* Asks Area */}
+                  <div className="w-full h-[40%] bg-red-500/20 border-t border-red-500 relative">
+                     <div className="absolute left-[30%] bottom-0 w-[15%] h-[180%] bg-red-500/40 border-t border-red-500 flex items-start justify-center">
+                        <span className="text-[10px] text-red-500 -mt-5 bg-[#0A0A0A] px-1">Sell Wall (65.2k)</span>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <div className="absolute bottom-2 left-0 right-0 flex justify-between px-8 text-xs text-[#737373] font-mono">
+              <span>64,500</span>
+              <span>65,100</span>
+              <span>65,500</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WhaleTrackerView({ whales }: { whales: any[] }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Whale Tracker</h1>
+        <div className="flex gap-2">
+          <button className="bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] rounded px-3 py-1.5 text-sm transition-colors flex items-center gap-2">
+            <Search className="w-4 h-4" /> Filter
+          </button>
+        </div>
+      </div>
+
+      <div className="panel overflow-hidden">
+        <div className="p-4 border-b border-[#262626] flex justify-between items-center">
+          <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Large Transactions (&gt; $1M)</h2>
+          <span className="flex items-center text-[10px] font-medium text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded animate-pulse">
+            LIVE STREAM
+          </span>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <div className="min-w-[800px]">
+            <div className="grid grid-cols-7 col-header">
+              <div className="col-span-1">Time</div>
+              <div className="col-span-1">Asset</div>
+              <div className="col-span-1">Type</div>
+              <div className="col-span-1">Amount</div>
+              <div className="col-span-1">Value (USD)</div>
+              <div className="col-span-1">Exchange</div>
+              <div className="col-span-1 text-right">Action</div>
+            </div>
+            
+            {whales.map((whale) => (
+              <div key={whale.id} className="grid grid-cols-7 data-row items-center hover:bg-[#1A1A1A] transition-colors">
+                <div className="col-span-1 data-value text-[#A3A3A3]">{whale.time}</div>
+                <div className="col-span-1 font-semibold text-sm">{whale.asset}</div>
+                <div className="col-span-1 flex items-center gap-2">
+                  {whale.icon}
+                  <span className={`text-xs px-2 py-1 rounded font-mono ${
+                    whale.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-500' : 
+                    whale.type === 'SELL' ? 'bg-red-500/10 text-red-500' : 
+                    'bg-yellow-500/10 text-yellow-500'
+                  }`}>
+                    {whale.type}
+                  </span>
+                </div>
+                <div className="col-span-1 data-value">{whale.amount}</div>
+                <div className="col-span-1 data-value font-bold text-white">{whale.value}</div>
+                <div className="col-span-1 data-value text-[#A3A3A3]">{whale.exchange}</div>
+                <div className="col-span-1 text-right">
+                  <button className="text-xs text-blue-500 hover:text-blue-400 font-medium bg-blue-500/10 px-2 py-1 rounded">
+                    Copy Trade
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
