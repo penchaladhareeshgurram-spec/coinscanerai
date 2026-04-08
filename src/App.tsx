@@ -16,6 +16,9 @@ import { EvilEye } from './components/EvilEye';
 import { useDeltaExchange } from './hooks/useDeltaExchange';
 import { CandlestickChart } from './components/CandlestickChart';
 import { useAITradingEngine } from './hooks/useAITradingEngine';
+import { NewsFeed } from './components/NewsFeed';
+import { QuantAssistant } from './components/QuantAssistant';
+import { PendingApprovals } from './components/PendingApprovals';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -558,7 +561,7 @@ export default function App() {
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
           {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
-          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} />}
+          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} />}
           {activeTab === 'whales' && <WhaleTrackerView whales={currentWhales} />}
           {activeTab === 'strategy' && <StrategyBuilderView />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
@@ -566,6 +569,9 @@ export default function App() {
           {activeTab === 'settings' && <SettingsView onLogout={() => setIsAuthenticated(false)} />}
         </div>
       </main>
+
+      {/* Pending Approvals Workflow */}
+      <PendingApprovals />
     </div>
   );
 }
@@ -737,9 +743,30 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
 
         {/* Risk & AI Status */}
         <div className="panel w-full lg:w-80 p-6 flex flex-col shrink-0">
-          <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">AI Risk Engine</h2>
+          <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">AI Execution & Risk</h2>
           
           <div className="space-y-4 flex-1">
+            {/* Automated Execution Stats */}
+            <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#262626]">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap className="w-4 h-4 text-blue-500" />
+                <h3 className="text-xs font-bold text-white">Automated Trading Bots</h3>
+              </div>
+              <p className="text-[10px] text-[#A3A3A3] mb-3 leading-relaxed">
+                AI agents automatically execute buy/sell orders in milliseconds, minimizing human bias, emotion, and slippage.
+              </p>
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div className="bg-[#0A0A0A] p-2 rounded border border-[#262626]">
+                  <div className="text-[#737373] mb-1">Avg Execution</div>
+                  <div className="text-emerald-500 font-bold">12 ms</div>
+                </div>
+                <div className="bg-[#0A0A0A] p-2 rounded border border-[#262626]">
+                  <div className="text-[#737373] mb-1">Avg Slippage</div>
+                  <div className="text-emerald-500 font-bold">0.001%</div>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#262626]">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-[#A3A3A3]">Current Drawdown</span>
@@ -747,16 +774,6 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
               </div>
               <div className="w-full bg-[#262626] rounded-full h-1.5">
                 <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '10%' }}></div>
-              </div>
-            </div>
-
-            <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#262626]">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-[#A3A3A3]">Daily Risk Limit</span>
-                <span className="font-mono text-white">1.2% / 2.0%</span>
-              </div>
-              <div className="w-full bg-[#262626] rounded-full h-1.5">
-                <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '60%' }}></div>
               </div>
             </div>
 
@@ -848,12 +865,17 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
           </div>
         </div>
       </div>
+
+      {/* Live Market News */}
+      <div className="h-[400px]">
+        <NewsFeed />
+      </div>
     </div>
   );
 }
 
 // --- Markets View Component (Live Updating) ---
-function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void }) {
+function MarketsView({ marketsData, onManualTrade, orderbook }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
@@ -878,9 +900,35 @@ function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManua
     };
   });
 
+  const deltaSymbol = selectedMarket.replace('/', '') + 'T';
+  const rawOb = orderbook[deltaSymbol] || { bids: [], asks: [] };
+  
+  // Process orderbook to calculate totals and identify walls
+  const processOB = (levels: any[], isAsk: boolean) => {
+    let total = 0;
+    const processed = levels.map((level: any) => {
+      const price = parseFloat(level.limit_price || level.price || 0);
+      const size = parseFloat(level.size || 0);
+      total += size;
+      return { price, size, total };
+    });
+    
+    const maxTotal = processed.length > 0 ? processed[processed.length - 1].total : 1;
+    const avgSize = processed.length > 0 ? total / processed.length : 1;
+    
+    return processed.map(p => ({
+      ...p,
+      depthPct: (p.total / maxTotal) * 100,
+      isWall: p.size > avgSize * 2.5 // Identify liquidity walls
+    }));
+  };
+
+  const bids = processOB(rawOb.bids, false);
+  const asks = processOB(rawOb.asks, true);
+
   return (
-    <div className="flex flex-col md:flex-row gap-6 h-full min-h-[600px] pb-10">
-      <div className="panel w-full md:w-80 flex flex-col shrink-0 overflow-hidden h-[600px] md:h-auto">
+    <div className="flex flex-col xl:flex-row gap-6 h-full min-h-[600px] pb-10">
+      <div className="panel w-full xl:w-72 flex flex-col shrink-0 overflow-hidden h-[400px] xl:h-auto">
         <div className="p-4 border-b border-[#262626]">
           <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Live Markets</h2>
         </div>
@@ -955,9 +1003,62 @@ function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManua
             ))}
           </div>
         </div>
-
-        <div className="flex-1 p-6">
+        <div className="flex-1 bg-[#0A0A0A] relative">
           <CandlestickChart data={marketHistory} currentPrice={market.price} />
+        </div>
+      </div>
+
+      {/* Right Column: Order Book */}
+      <div className="panel w-full xl:w-80 flex flex-col shrink-0 overflow-hidden h-[500px] xl:h-auto">
+        <div className="p-4 border-b border-[#262626] flex justify-between items-center">
+          <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Order Book</h2>
+          <span className="text-xs text-[#525252] font-mono">L2 Depth</span>
+        </div>
+        <div className="flex-1 overflow-x-auto overflow-y-hidden flex flex-col custom-scrollbar">
+          <div className="min-w-[350px] flex-1 flex flex-col p-2 font-mono text-[11px]">
+            <div className="grid grid-cols-3 text-[#737373] mb-2 px-2">
+              <div>Price</div>
+              <div className="text-right">Size</div>
+              <div className="text-right">Total</div>
+            </div>
+            
+            {/* Asks (Sells) */}
+            <div className="flex flex-col-reverse flex-1 overflow-y-auto custom-scrollbar">
+              {asks.length === 0 ? (
+                <div className="text-center text-[#525252] py-4">Waiting for data...</div>
+              ) : (
+                asks.map((ask: any, i: number) => (
+                  <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
+                    <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${ask.isWall ? 'bg-red-500/30 border-l-4 border-red-500' : 'bg-red-500/10'}`} style={{ width: `${ask.depthPct}%` }}></div>
+                    <div className={`z-10 ${ask.isWall ? 'text-red-400 font-bold' : 'text-red-500'}`}>{ask.price.toFixed(2)}</div>
+                    <div className="text-right z-10 text-white">{ask.size.toFixed(3)}</div>
+                    <div className="text-right z-10 text-[#A3A3A3]">{ask.total.toFixed(3)}</div>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {/* Spread */}
+            <div className="py-2 my-1 text-center border-y border-[#262626] text-[#A3A3A3] flex justify-center items-center gap-4 bg-[#141414]">
+              <span className="font-bold text-white text-sm">${market.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            </div>
+
+            {/* Bids (Buys) */}
+            <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar">
+              {bids.length === 0 ? (
+                <div className="text-center text-[#525252] py-4">Waiting for data...</div>
+              ) : (
+                bids.map((bid: any, i: number) => (
+                  <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
+                    <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${bid.isWall ? 'bg-emerald-500/30 border-l-4 border-emerald-500' : 'bg-emerald-500/10'}`} style={{ width: `${bid.depthPct}%` }}></div>
+                    <div className={`z-10 ${bid.isWall ? 'text-emerald-400 font-bold' : 'text-emerald-500'}`}>{bid.price.toFixed(2)}</div>
+                    <div className="text-right z-10 text-white">{bid.size.toFixed(3)}</div>
+                    <div className="text-right z-10 text-[#A3A3A3]">{bid.total.toFixed(3)}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -966,12 +1067,52 @@ function MarketsView({ marketsData, onManualTrade }: { marketsData: any, onManua
 
 // --- Strategy Builder View Component ---
 function StrategyBuilderView() {
+  const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
+  const [manualOverride, setManualOverride] = useState(true);
+
+  const pineScriptCode = `//@version=5
+strategy("AI Signal Strategy with Manual Override", overlay=true)
+
+// --- Inputs ---
+manual_trigger = input.bool(true, title="Manual Override (Wait for Approval)")
+fast_length = input.int(9, title="Fast MA Length")
+slow_length = input.int(21, title="Slow MA Length")
+rsi_length = input.int(14, title="RSI Length")
+
+// --- AI Signal Logic (Mocked via MA/RSI) ---
+fast_ma = ta.ema(close, fast_length)
+slow_ma = ta.ema(close, slow_length)
+rsi = ta.rsi(close, rsi_length)
+
+bullish_signal = ta.crossover(fast_ma, slow_ma) and rsi < 70
+bearish_signal = ta.crossunder(fast_ma, slow_ma) and rsi > 30
+
+// --- Execution Logic ---
+if bullish_signal
+    if manual_trigger
+        // Highlight setup, send alert, wait for manual execution
+        alert("AI Signal: BULLISH SETUP DETECTED. Awaiting manual approval.", alert.freq_once_per_bar_close)
+        label.new(bar_index, low, "BULLISH SETUP\\n(Pending Approval)", color=color.blue, textcolor=color.white, style=label.style_label_up)
+    else
+        // Auto-execute
+        strategy.entry("Long", strategy.long)
+
+if bearish_signal
+    if manual_trigger
+        // Highlight setup, send alert, wait for manual execution
+        alert("AI Signal: BEARISH SETUP DETECTED. Awaiting manual approval.", alert.freq_once_per_bar_close)
+        label.new(bar_index, high, "BEARISH SETUP\\n(Pending Approval)", color=color.orange, textcolor=color.white, style=label.style_label_down)
+    else
+        // Auto-execute
+        strategy.entry("Short", strategy.short)
+`;
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-10">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+    <div className="max-w-7xl mx-auto space-y-6 pb-10 h-full flex flex-col">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Strategy Builder</h1>
-          <p className="text-[#A3A3A3] text-sm mt-1">Design, backtest, and deploy custom trading conditions.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Strategy Builder & Quant Assistant</h1>
+          <p className="text-[#A3A3A3] text-sm mt-1">Design, backtest, and deploy custom trading conditions with AI assistance.</p>
         </div>
         <div className="flex gap-3 w-full sm:w-auto">
           <button className="flex-1 sm:flex-none px-4 py-2 bg-[#1A1A1A] border border-[#262626] rounded-lg text-sm font-medium hover:bg-[#262626] transition-colors flex items-center justify-center">
@@ -983,57 +1124,99 @@ function StrategyBuilderView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="panel p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Entry Conditions</h2>
-              <button className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
-                <Plus className="w-3 h-3 mr-1"/> Add Condition
-              </button>
-            </div>
-            <div className="space-y-3">
-              <ConditionRow logic="IF" indicator="RSI (14)" operator="is less than" value="30" />
-              <ConditionRow logic="AND" indicator="Price" operator="crosses above" value="EMA (200)" />
-              <ConditionRow logic="AND" indicator="Volume" operator="is greater than" value="SMA (20)" />
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[600px]">
+        {/* Left Side: Strategy Builder (Visual or Code) */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="flex gap-2 border-b border-[#262626] pb-2 shrink-0">
+            <button 
+              onClick={() => setActiveTab('visual')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'visual' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+            >
+              Visual Builder
+            </button>
+            <button 
+              onClick={() => setActiveTab('code')}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${activeTab === 'code' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+            >
+              <Terminal className="w-4 h-4" /> Pine Script / Python
+            </button>
           </div>
 
-          <div className="panel p-6">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">Execution</h2>
-            <div className="flex flex-wrap items-center gap-3 bg-[#1A1A1A] p-4 rounded-lg border border-[#262626]">
-              <span className="font-mono text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded">THEN BUY</span>
-              <select className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm outline-none text-white">
-                <option>Market Order</option>
-                <option>Limit Order</option>
-              </select>
-              <span className="text-sm text-[#A3A3A3]">with</span>
-              <input type="text" defaultValue="2" className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm w-16 text-center outline-none text-white font-mono" />
-              <span className="text-sm text-[#A3A3A3]">% of Capital</span>
-            </div>
-          </div>
-        </div>
+          {activeTab === 'visual' ? (
+            <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="panel p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Entry Conditions</h2>
+                  <button className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
+                    <Plus className="w-3 h-3 mr-1"/> Add Condition
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <ConditionRow logic="IF" indicator="RSI (14)" operator="is less than" value="30" />
+                  <ConditionRow logic="AND" indicator="Price" operator="crosses above" value="EMA (200)" />
+                  <ConditionRow logic="AND" indicator="Volume" operator="is greater than" value="SMA (20)" />
+                </div>
+              </div>
 
-        <div className="space-y-6">
-          <div className="panel p-6">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">Exit Rules</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-[#A3A3A3] mb-1.5 block">Take Profit (%)</label>
-                <input type="text" defaultValue="5.0" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 transition-colors font-mono" />
+              <div className="panel p-6">
+                <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">Execution</h2>
+                <div className="flex flex-wrap items-center gap-3 bg-[#1A1A1A] p-4 rounded-lg border border-[#262626]">
+                  <span className="font-mono text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded">THEN BUY</span>
+                  <select className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm outline-none text-white">
+                    <option>Market Order</option>
+                    <option>Limit Order</option>
+                  </select>
+                  <span className="text-sm text-[#A3A3A3]">with</span>
+                  <input type="text" defaultValue="2" className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm w-16 text-center outline-none text-white font-mono" />
+                  <span className="text-sm text-[#A3A3A3]">% of Capital</span>
+                </div>
               </div>
-              <div>
-                <label className="text-xs text-[#A3A3A3] mb-1.5 block">Stop Loss (%)</label>
-                <input type="text" defaultValue="1.5" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500 transition-colors font-mono" />
+
+              <div className="panel p-6">
+                <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">Exit Rules</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs text-[#A3A3A3] mb-1.5 block">Take Profit (%)</label>
+                    <input type="text" defaultValue="5.0" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 transition-colors font-mono" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[#A3A3A3] mb-1.5 block">Stop Loss (%)</label>
+                    <input type="text" defaultValue="1.5" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500 transition-colors font-mono" />
+                  </div>
+                  <div className="pt-2 border-t border-[#262626]">
+                    <label className="flex items-center gap-2 cursor-pointer mt-2">
+                      <input type="checkbox" defaultChecked className="rounded border-[#262626] bg-[#1A1A1A] text-emerald-500 focus:ring-emerald-500 focus:ring-offset-[#0A0A0A]" />
+                      <span className="text-sm">Enable Trailing Stop</span>
+                    </label>
+                  </div>
+                </div>
               </div>
-              <div className="pt-2 border-t border-[#262626]">
-                <label className="flex items-center gap-2 cursor-pointer mt-2">
-                  <input type="checkbox" defaultChecked className="rounded border-[#262626] bg-[#1A1A1A] text-emerald-500 focus:ring-emerald-500 focus:ring-offset-[#0A0A0A]" />
-                  <span className="text-sm">Enable Trailing Stop</span>
+            </div>
+          ) : (
+            <div className="panel flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 border-b border-[#262626] flex justify-between items-center bg-[#1A1A1A]">
+                <div className="flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-blue-500" />
+                  <h2 className="text-sm font-semibold text-white">AI Strategy Script</h2>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-xs text-[#A3A3A3]">Manual Override</span>
+                  <div className="relative inline-flex items-center">
+                    <input type="checkbox" checked={manualOverride} onChange={(e) => setManualOverride(e.target.checked)} className="sr-only peer" />
+                    <div className="w-9 h-5 bg-[#262626] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                  </div>
                 </label>
               </div>
+              <div className="p-4 bg-[#0A0A0A] flex-1 overflow-y-auto custom-scrollbar font-mono text-sm text-[#A3A3A3]">
+                <pre><code>{pineScriptCode}</code></pre>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* Right Side: Quant Assistant */}
+        <div className="lg:col-span-1 h-[600px] lg:h-auto">
+          <QuantAssistant />
         </div>
       </div>
     </div>
