@@ -125,6 +125,7 @@ export default function App() {
   const [holdingsData, setHoldingsData] = useState(initialHoldingsData);
   const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
   const [performanceData, setPerformanceData] = useState(initialPerformanceData);
+  const [priceAlerts, setPriceAlerts] = useState<{ id: string, asset: string, targetPrice: number, condition: 'above' | 'below', active: boolean }[]>([]);
 
   const { prices, orderbook, trades } = useDeltaExchange();
   const pricesRef = useRef(prices);
@@ -132,6 +133,45 @@ export default function App() {
   useEffect(() => {
     pricesRef.current = prices;
   }, [prices]);
+
+  // Check Price Alerts
+  useEffect(() => {
+    if (priceAlerts.length === 0) return;
+
+    let alertsTriggered = false;
+    const updatedAlerts = priceAlerts.map(alert => {
+      if (!alert.active) return alert;
+
+      const currentPrice = marketsData[alert.asset as keyof typeof marketsData]?.price;
+      if (currentPrice === undefined) return alert;
+
+      let triggered = false;
+      if (alert.condition === 'above' && currentPrice >= alert.targetPrice) {
+        triggered = true;
+      } else if (alert.condition === 'below' && currentPrice <= alert.targetPrice) {
+        triggered = true;
+      }
+
+      if (triggered) {
+        alertsTriggered = true;
+        setNotificationsData(prev => [{
+          id: Date.now(),
+          type: 'ALERT',
+          asset: alert.asset,
+          price: `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          time: 'Just now',
+          msg: `Price alert triggered! ${alert.asset} is ${alert.condition} $${alert.targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        }, ...prev]);
+        return { ...alert, active: false }; // Deactivate after triggering
+      }
+      return alert;
+    });
+
+    if (alertsTriggered) {
+      setPriceAlerts(updatedAlerts);
+      setShowNotifications(true);
+    }
+  }, [marketsData, priceAlerts]);
 
   const { aiLogs } = useAITradingEngine(
     botActive,
@@ -561,7 +601,18 @@ export default function App() {
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
           {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
-          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} />}
+          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} onSetAlert={(asset, targetPrice, condition) => {
+            setPriceAlerts(prev => [...prev, { id: Date.now().toString(), asset, targetPrice, condition, active: true }]);
+            setShowNotifications(true);
+            setNotificationsData(prev => [{
+              id: Date.now(),
+              type: 'INFO',
+              asset: 'SYSTEM',
+              price: '',
+              time: 'Just now',
+              msg: `Alert set for ${asset} ${condition} $${targetPrice.toLocaleString()}`
+            }, ...prev]);
+          }} />}
           {activeTab === 'whales' && <WhaleTrackerView whales={currentWhales} />}
           {activeTab === 'strategy' && <StrategyBuilderView />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
@@ -875,11 +926,29 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
 }
 
 // --- Markets View Component (Live Updating) ---
-function MarketsView({ marketsData, onManualTrade, orderbook }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any }) {
+function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any, onSetAlert?: (asset: string, targetPrice: number, condition: 'above' | 'below') => void }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
+  const [showAlertDialog, setShowAlertDialog] = useState(false);
+  const [alertPrice, setAlertPrice] = useState('');
+  const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
+
+  // Update alert price default when market changes if not set
+  useEffect(() => {
+    if (!showAlertDialog) {
+      setAlertPrice(market.price.toString());
+    }
+  }, [selectedMarket, market.price, showAlertDialog]);
+
+  const handleSetAlert = () => {
+    const price = parseFloat(alertPrice);
+    if (!isNaN(price) && onSetAlert) {
+      onSetAlert(selectedMarket, price, alertCondition);
+      setShowAlertDialog(false);
+    }
+  };
 
   const marketHistory = market.history.map((h: any, i: number, arr: any[]) => {
     const prevPrice = i > 0 ? arr[i-1].price : h.price;
@@ -995,12 +1064,62 @@ function MarketsView({ marketsData, onManualTrade, orderbook }: { marketsData: a
               <div>Spread: {market.spread}%</div>
             </div>
           </div>
-          <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626] self-start sm:self-auto">
-            {['1H', '1D', '1W', '1M', '1Y'].map(tf => (
-              <button key={tf} className={`px-3 py-1 text-xs font-medium rounded-md ${tf === '1H' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}>
-                {tf}
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="relative">
+              <button 
+                onClick={() => setShowAlertDialog(!showAlertDialog)}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md bg-[#1A1A1A] border border-[#262626] text-[#A3A3A3] hover:text-white hover:bg-[#262626] transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5" /> Alert
               </button>
-            ))}
+              
+              {showAlertDialog && (
+                <div className="absolute right-0 mt-2 w-64 bg-[#141414] border border-[#262626] rounded-xl shadow-2xl p-4 z-50">
+                  <h3 className="text-sm font-semibold mb-3">Set Price Alert</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-[#A3A3A3] block mb-1">Condition</label>
+                      <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
+                        <button 
+                          onClick={() => setAlertCondition('above')}
+                          className={`flex-1 px-2 py-1 text-xs font-medium rounded-md ${alertCondition === 'above' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                        >
+                          Above
+                        </button>
+                        <button 
+                          onClick={() => setAlertCondition('below')}
+                          className={`flex-1 px-2 py-1 text-xs font-medium rounded-md ${alertCondition === 'below' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                        >
+                          Below
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-[#A3A3A3] block mb-1">Target Price ($)</label>
+                      <input 
+                        type="number" 
+                        value={alertPrice}
+                        onChange={(e) => setAlertPrice(e.target.value)}
+                        className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSetAlert}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 rounded-lg text-sm transition-colors"
+                    >
+                      Create Alert
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
+              {['1H', '1D', '1W', '1M', '1Y'].map(tf => (
+                <button key={tf} className={`px-3 py-1 text-xs font-medium rounded-md ${tf === '1H' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}>
+                  {tf}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="flex-1 bg-[#0A0A0A] relative">

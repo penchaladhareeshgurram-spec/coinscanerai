@@ -16,13 +16,19 @@ export const useMarketNews = () => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const res = await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN');
+        const res = await fetch('https://newsdata.io/api/1/news?apikey=tpub_a48c6030e25b4263bdd98e8fbcf2f67c&q=crypto&language=en');
         const data = await res.json();
-        if (data && Array.isArray(data.Data)) {
-          setNews(data.Data.slice(0, 15));
-        } else if (data && data.Data && Array.isArray(data.Data.Data)) {
-          // Sometimes APIs wrap it differently
-          setNews(data.Data.Data.slice(0, 15));
+        
+        if (data && data.status === 'success' && Array.isArray(data.results)) {
+          const mappedNews = data.results.slice(0, 15).map((article: any) => ({
+            id: article.article_id || Math.random().toString(),
+            title: article.title,
+            url: article.link,
+            source: article.source_name || article.source_id || 'News',
+            published_on: new Date(article.pubDate).getTime() / 1000,
+            imageurl: article.image_url || ''
+          }));
+          setNews(mappedNews);
         } else {
           console.warn("Unexpected news API response format:", data);
         }
