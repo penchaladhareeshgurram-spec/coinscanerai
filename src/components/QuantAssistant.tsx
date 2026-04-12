@@ -11,7 +11,18 @@ interface Message {
   data?: any;
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiClient: GoogleGenAI | null = null;
+
+function getAIClient(): GoogleGenAI {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
+    aiClient = new GoogleGenAI({ apiKey: key });
+  }
+  return aiClient;
+}
 
 export function QuantAssistant() {
   const [messages, setMessages] = useState<Message[]>([
@@ -71,6 +82,7 @@ export function QuantAssistant() {
         parts: [{ text: m.content }]
       }));
 
+      const ai = getAIClient();
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-pro',
         contents: [
