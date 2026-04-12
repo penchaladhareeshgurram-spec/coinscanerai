@@ -16,7 +16,7 @@ export const useMarketNews = () => {
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const res = await fetch('https://newsdata.io/api/1/news?apikey=tpub_a48c6030e25b4263bdd98e8fbcf2f67c&q=crypto&language=en');
+        const res = await fetch('https://newsdata.io/api/1/news?apikey=tpub_a48c6030e25b4263bdd98e8fbcf2f67c&q=crypto%20OR%20forex&language=en');
         const data = await res.json();
         
         if (data && data.status === 'success' && Array.isArray(data.results)) {

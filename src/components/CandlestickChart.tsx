@@ -1,8 +1,8 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time } from 'lightweight-charts';
 import React, { useEffect, useRef } from 'react';
 
 interface CandlestickData {
-  time: number | string;
+  time: Time;
   open: number;
   high: number;
   low: number;

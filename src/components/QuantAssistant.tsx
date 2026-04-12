@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, ShieldAlert, TrendingUp, Target, CheckCircle2, XCircle } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
+import Markdown from 'react-markdown';
 
 interface Message {
   id: string;
@@ -9,12 +11,14 @@ interface Message {
   data?: any;
 }
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 export function QuantAssistant() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: "I am your Quantitative Trading Assistant. Provide a ticker or chart data, and I will provide Support/Resistance, Sentiment Analysis, and a Risk/Reward profile. I will not execute trades autonomously. I will wait for your 'EXECUTE' command."
+      content: "I am your Quantitative Trading Assistant. I can help clarify your trading doubts, provide deep technical and fundamental analysis, and offer Support/Resistance, Sentiment Analysis, and Risk/Reward profiles. I will not execute trades autonomously. I will wait for your 'EXECUTE' command."
     }
   ]);
   const [input, setInput] = useState('');
@@ -29,7 +33,7 @@ export function QuantAssistant() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: input };
@@ -37,12 +41,10 @@ export function QuantAssistant() {
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      let aiMsg: Message;
-
-      if (userMsg.content.toUpperCase() === 'EXECUTE') {
-        aiMsg = {
+    if (userMsg.content.toUpperCase() === 'EXECUTE') {
+      // Keep the simulation for EXECUTE
+      setTimeout(() => {
+        const aiMsg: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
           content: 'Formatting final trade parameters for manual review...',
@@ -57,27 +59,45 @@ export function QuantAssistant() {
             risk: '1.5%'
           }
         };
-      } else {
-        const ticker = userMsg.content.toUpperCase().split(' ')[0] || 'ASSET';
-        aiMsg = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: `Analysis for ${ticker} complete. Waiting for 'EXECUTE' command.`,
-          type: 'analysis',
-          data: {
-            ticker,
-            support: [62000, 60500],
-            resistance: [65000, 68000],
-            sentiment: 'BULLISH (72%) - Recent ETF inflows and positive macro data driving momentum.',
-            riskReward: '1:2.5',
-            entryZone: '64000 - 64500'
-          }
-        };
-      }
+        setMessages(prev => [...prev, aiMsg]);
+        setIsTyping(false);
+      }, 1000);
+      return;
+    }
 
+    try {
+      const history = messages.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      }));
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: [
+          ...history,
+          { role: 'user', parts: [{ text: userMsg.content }] }
+        ],
+        config: {
+          systemInstruction: "You are a Quantitative Trading Assistant. You help clarify traders' doubts, provide deep technical and fundamental analysis when provided a specific ticker, and provide Support/Resistance, Sentiment Analysis, and a Risk/Reward profile. Do not execute trades autonomously. Wait for the 'EXECUTE' command before formatting final trade parameters. Answer the user's trading questions and clarify their doubts. Format your responses using markdown."
+        }
+      });
+
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: response.text || "I couldn't process that.",
+      };
       setMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      console.error(error);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: "Sorry, I encountered an error while processing your request."
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -94,7 +114,13 @@ export function QuantAssistant() {
               {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
             <div className={`max-w-[80%] rounded-xl p-3 ${msg.role === 'user' ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-[#1A1A1A] border border-[#262626]'}`}>
-              <p className="text-sm leading-relaxed">{msg.content}</p>
+              {msg.role === 'assistant' ? (
+                <div className="text-sm leading-relaxed markdown-body">
+                  <Markdown>{msg.content}</Markdown>
+                </div>
+              ) : (
+                <p className="text-sm leading-relaxed">{msg.content}</p>
+              )}
               
               {msg.type === 'analysis' && msg.data && (
                 <div className="mt-4 space-y-3 border-t border-[#262626] pt-3">

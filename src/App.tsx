@@ -14,6 +14,7 @@ import { Aurora } from './components/Aurora';
 import SplitText from './components/SplitText';
 import { EvilEye } from './components/EvilEye';
 import { useDeltaExchange } from './hooks/useDeltaExchange';
+import { useForexData } from './hooks/useForexData';
 import { CandlestickChart } from './components/CandlestickChart';
 import { useAITradingEngine } from './hooks/useAITradingEngine';
 import { NewsFeed } from './components/NewsFeed';
@@ -43,6 +44,12 @@ const initialMarketsData = {
   'XRP/USD': { name: 'Ripple', price: 0.62, change: 1.1, history: generateHistory(0.62, 0.01, 60), liquidity: 500000000, spread: 0.1 },
   'BNB/USD': { name: 'Binance Coin', price: 580.20, change: -0.5, history: generateHistory(580, 2, 60), liquidity: 620000000, spread: 0.03 },
   'ADA/USD': { name: 'Cardano', price: 0.45, change: 0.8, history: generateHistory(0.45, 0.005, 60), liquidity: 300000000, spread: 0.15 },
+  'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.1, history: generateHistory(1.0850, 0.001, 60), liquidity: 5000000000, spread: 0.005 },
+  'GBP/USD': { name: 'British Pound / US Dollar', price: 1.2650, change: -0.2, history: generateHistory(1.2650, 0.001, 60), liquidity: 4000000000, spread: 0.008 },
+  'USD/JPY': { name: 'US Dollar / Japanese Yen', price: 151.20, change: 0.5, history: generateHistory(151.20, 0.1, 60), liquidity: 4500000000, spread: 0.01 },
+  'AUD/USD': { name: 'Australian Dollar / US Dollar', price: 0.6540, change: 0.3, history: generateHistory(0.6540, 0.001, 60), liquidity: 3000000000, spread: 0.012 },
+  'USD/CAD': { name: 'US Dollar / Canadian Dollar', price: 1.3520, change: -0.1, history: generateHistory(1.3520, 0.001, 60), liquidity: 2500000000, spread: 0.015 },
+  'USD/CHF': { name: 'US Dollar / Swiss Franc', price: 0.9020, change: 0.2, history: generateHistory(0.9020, 0.001, 60), liquidity: 2000000000, spread: 0.015 },
 };
 
 const initialPerformanceData = [
@@ -130,9 +137,16 @@ export default function App() {
   const { prices, orderbook, trades } = useDeltaExchange();
   const pricesRef = useRef(prices);
   
+  const { forexPrices } = useForexData();
+  const forexPricesRef = useRef(forexPrices);
+
   useEffect(() => {
     pricesRef.current = prices;
   }, [prices]);
+
+  useEffect(() => {
+    forexPricesRef.current = forexPrices;
+  }, [forexPrices]);
 
   // Check Price Alerts
   useEffect(() => {
@@ -242,6 +256,8 @@ export default function App() {
           
           if (pricesRef.current[deltaSymbol]) {
             newPrice = pricesRef.current[deltaSymbol];
+          } else if (forexPricesRef.current[key]) {
+            newPrice = forexPricesRef.current[key].price;
           }
 
           const initialPrice = initialMarketsData[key as keyof typeof initialMarketsData].price;
