@@ -948,6 +948,10 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { ma
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
 
+  const [showDemandSupply, setShowDemandSupply] = useState(true);
+  const [showSupportResistance, setShowSupportResistance] = useState(true);
+  const [showLiquidityPools, setShowLiquidityPools] = useState(true);
+
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
 
@@ -1080,7 +1084,30 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { ma
               <div>Spread: {market.spread}%</div>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap justify-end">
+            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
+              <button 
+                onClick={() => setShowDemandSupply(!showDemandSupply)}
+                className={`px-2 py-1 text-[10px] font-medium rounded-md ${showDemandSupply ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                title="Demand & Supply Zones"
+              >
+                D/S
+              </button>
+              <button 
+                onClick={() => setShowSupportResistance(!showSupportResistance)}
+                className={`px-2 py-1 text-[10px] font-medium rounded-md ${showSupportResistance ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                title="Support & Resistance"
+              >
+                S/R
+              </button>
+              <button 
+                onClick={() => setShowLiquidityPools(!showLiquidityPools)}
+                className={`px-2 py-1 text-[10px] font-medium rounded-md ${showLiquidityPools ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                title="Liquidity Pools"
+              >
+                Liq
+              </button>
+            </div>
             <div className="relative">
               <button 
                 onClick={() => setShowAlertDialog(!showAlertDialog)}
@@ -1139,7 +1166,13 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { ma
           </div>
         </div>
         <div className="flex-1 bg-[#0A0A0A] relative">
-          <CandlestickChart data={marketHistory} currentPrice={market.price} />
+          <CandlestickChart 
+            data={marketHistory} 
+            currentPrice={market.price} 
+            showDemandSupply={showDemandSupply}
+            showSupportResistance={showSupportResistance}
+            showLiquidityPools={showLiquidityPools}
+          />
         </div>
       </div>
 

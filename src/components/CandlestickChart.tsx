@@ -1,5 +1,8 @@
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time, LineStyle, IPriceLine } from 'lightweight-charts';
 import React, { useEffect, useRef } from 'react';
+import { detectDemandSupply } from '../indicators/demandSupply';
+import { detectSupportResistance } from '../indicators/supportResistance';
+import { detectLiquidityPools } from '../indicators/liquidityPools';
 
 interface CandlestickData {
   time: Time;
@@ -18,6 +21,9 @@ interface CandlestickChartProps {
     upColor?: string;
     downColor?: string;
   };
+  showDemandSupply?: boolean;
+  showSupportResistance?: boolean;
+  showLiquidityPools?: boolean;
 }
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
@@ -29,10 +35,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     upColor = '#10B981',
     downColor = '#EF4444',
   } = {},
+  showDemandSupply = true,
+  showSupportResistance = true,
+  showLiquidityPools = true,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -96,8 +106,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       wickDownColor: downColor,
       priceFormat: {
         type: 'price',
-        precision: 2,
-        minMove: 0.01,
+        precision: 5,
+        minMove: 0.00001,
       },
     });
 
@@ -110,7 +120,73 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [data, backgroundColor, textColor, upColor, downColor]);
+  }, [backgroundColor, textColor, upColor, downColor]);
+
+  // Handle data updates and indicators
+  useEffect(() => {
+    if (!seriesRef.current || data.length === 0) return;
+    
+    seriesRef.current.setData(data);
+
+    // Clear existing lines
+    priceLinesRef.current.forEach(line => seriesRef.current?.removePriceLine(line));
+    priceLinesRef.current = [];
+
+    // Calculate and add indicators
+    if (showDemandSupply) {
+      const zones = detectDemandSupply(data as any);
+      zones.forEach(zone => {
+        const color = zone.type === 'demand' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
+        const title = zone.type === 'demand' ? 'Demand' : 'Supply';
+        
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: zone.top,
+          color: color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `${title} Top`,
+        }));
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: zone.bottom,
+          color: color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: `${title} Btm`,
+        }));
+      });
+    }
+
+    if (showSupportResistance) {
+      const levels = detectSupportResistance(data as any);
+      levels.forEach(level => {
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: level.price,
+          color: level.type === 'support' ? '#3B82F6' : '#F59E0B',
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: level.type === 'support' ? 'Support' : 'Resistance',
+        }));
+      });
+    }
+
+    if (showLiquidityPools) {
+      const pools = detectLiquidityPools(data as any);
+      pools.forEach(pool => {
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: pool.price,
+          color: '#8B5CF6',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          axisLabelVisible: true,
+          title: pool.type === 'buy-side' ? 'Buy Liq' : 'Sell Liq',
+        }));
+      });
+    }
+
+  }, [data, showDemandSupply, showSupportResistance, showLiquidityPools]);
 
   // Update the last candle with the current live price
   useEffect(() => {
