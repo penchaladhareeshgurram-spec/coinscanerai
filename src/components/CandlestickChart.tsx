@@ -136,14 +136,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (showDemandSupply) {
       const zones = detectDemandSupply(data as any);
       zones.forEach(zone => {
-        const color = zone.type === 'demand' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)';
-        const title = zone.type === 'demand' ? 'Demand' : 'Supply';
+        const color = zone.isBroken ? 'rgba(156, 163, 175, 0.5)' : (zone.type === 'demand' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)');
+        const title = zone.isBroken ? `Broken ${zone.type}` : (zone.type === 'demand' ? 'Demand' : 'Supply');
+        const style = zone.isBroken ? LineStyle.Dotted : LineStyle.Solid;
         
         priceLinesRef.current.push(seriesRef.current!.createPriceLine({
           price: zone.top,
           color: color,
           lineWidth: 1,
-          lineStyle: LineStyle.Solid,
+          lineStyle: style,
           axisLabelVisible: true,
           title: `${title} Top`,
         }));
@@ -151,7 +152,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           price: zone.bottom,
           color: color,
           lineWidth: 1,
-          lineStyle: LineStyle.Solid,
+          lineStyle: style,
           axisLabelVisible: true,
           title: `${title} Btm`,
         }));
@@ -161,13 +162,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (showSupportResistance) {
       const levels = detectSupportResistance(data as any);
       levels.forEach(level => {
+        const color = level.isBroken ? 'rgba(156, 163, 175, 0.5)' : (level.type === 'support' ? '#3B82F6' : '#F59E0B');
+        const title = level.isBroken ? `Broken ${level.type}` : (level.type === 'support' ? 'Support' : 'Resistance');
+        const style = level.isBroken ? LineStyle.Dotted : LineStyle.Dashed;
+
         priceLinesRef.current.push(seriesRef.current!.createPriceLine({
           price: level.price,
-          color: level.type === 'support' ? '#3B82F6' : '#F59E0B',
+          color: color,
           lineWidth: 2,
-          lineStyle: LineStyle.Dashed,
+          lineStyle: style,
           axisLabelVisible: true,
-          title: level.type === 'support' ? 'Support' : 'Resistance',
+          title: title,
         }));
       });
     }
@@ -175,13 +180,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (showLiquidityPools) {
       const pools = detectLiquidityPools(data as any);
       pools.forEach(pool => {
+        const color = pool.isSwept ? 'rgba(156, 163, 175, 0.5)' : '#8B5CF6';
+        const title = pool.isSwept ? 'Swept Liq' : (pool.type === 'buy-side' ? 'Buy Liq' : 'Sell Liq');
+        const style = pool.isSwept ? LineStyle.Dotted : LineStyle.LargeDashed;
+
         priceLinesRef.current.push(seriesRef.current!.createPriceLine({
           price: pool.price,
-          color: '#8B5CF6',
+          color: color,
           lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
+          lineStyle: style,
           axisLabelVisible: true,
-          title: pool.type === 'buy-side' ? 'Buy Liq' : 'Sell Liq',
+          title: title,
         }));
       });
     }

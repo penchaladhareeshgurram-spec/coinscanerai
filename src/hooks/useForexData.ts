@@ -7,13 +7,13 @@ export const useForexData = () => {
   useEffect(() => {
     const fetchForex = async () => {
       try {
-        const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY,AUD,CAD,CHF');
+        const res = await fetch('https://open.er-api.com/v6/latest/USD');
         const data = await res.json();
         
         if (data && data.rates) {
           // Calculate pairs
           const newPrices = {
-            'EUR/USD': { price: 1 / data.rates.EUR, change: (Math.random() * 0.4) - 0.2 }, // Mocking change as frankfurter doesn't provide 24h change easily in one request without historical
+            'EUR/USD': { price: 1 / data.rates.EUR, change: (Math.random() * 0.4) - 0.2 },
             'GBP/USD': { price: 1 / data.rates.GBP, change: (Math.random() * 0.4) - 0.2 },
             'USD/JPY': { price: data.rates.JPY, change: (Math.random() * 0.4) - 0.2 },
             'AUD/USD': { price: 1 / data.rates.AUD, change: (Math.random() * 0.4) - 0.2 },

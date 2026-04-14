@@ -13,7 +13,8 @@ export const useAITradingEngine = (
   orderbook: Record<string, any>,
   activeTrades: any[],
   setActiveTrades: React.Dispatch<React.SetStateAction<any[]>>,
-  setBalance: React.Dispatch<React.SetStateAction<number>>
+  setBalance: React.Dispatch<React.SetStateAction<number>>,
+  setTradeHistory: React.Dispatch<React.SetStateAction<any[]>>
 ) => {
   const [aiLogs, setAiLogs] = useState<AILog[]>([]);
   const lastTradeTime = useRef<number>(0);
@@ -88,12 +89,14 @@ export const useAITradingEngine = (
       if (sl && (isLong ? btcPrice <= sl : btcPrice >= sl)) {
         log(`[TRADE] Stop Loss hit for ${trade.id} at ${btcPrice.toFixed(2)}`, 'TRADE');
         setBalance(prev => prev + trade.pnlVal);
+        setTradeHistory(prev => [{ ...trade, exitPrice: btcPrice, closeReason: 'SL Hit', closeTime: new Date().toISOString() }, ...prev]);
         tradesUpdated = true;
         return false;
       }
       if (tp && (isLong ? btcPrice >= tp : btcPrice <= tp)) {
         log(`[TRADE] Take Profit hit for ${trade.id} at ${btcPrice.toFixed(2)}`, 'TRADE');
         setBalance(prev => prev + trade.pnlVal);
+        setTradeHistory(prev => [{ ...trade, exitPrice: btcPrice, closeReason: 'TP Hit', closeTime: new Date().toISOString() }, ...prev]);
         tradesUpdated = true;
         return false;
       }

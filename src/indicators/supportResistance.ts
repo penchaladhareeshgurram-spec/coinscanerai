@@ -4,6 +4,7 @@ export interface Level {
   price: number;
   type: 'support' | 'resistance';
   touches: number;
+  isBroken?: boolean;
 }
 
 export function detectSupportResistance(data: OHLCV[], threshold = 0.005): Level[] {
@@ -24,11 +25,14 @@ export function detectSupportResistance(data: OHLCV[], threshold = 0.005): Level
     }
   }
 
+  const lastClose = data[data.length - 1].close;
+
   // Cluster highs for resistance
   const resistanceClusters = clusterLevels(highs, threshold);
   resistanceClusters.forEach(cluster => {
     if (cluster.touches >= 2) {
-      levels.push({ price: cluster.price, type: 'resistance', touches: cluster.touches });
+      const isBroken = lastClose > cluster.price * (1 + threshold);
+      levels.push({ price: cluster.price, type: 'resistance', touches: cluster.touches, isBroken });
     }
   });
 
@@ -36,7 +40,8 @@ export function detectSupportResistance(data: OHLCV[], threshold = 0.005): Level
   const supportClusters = clusterLevels(lows, threshold);
   supportClusters.forEach(cluster => {
     if (cluster.touches >= 2) {
-      levels.push({ price: cluster.price, type: 'support', touches: cluster.touches });
+      const isBroken = lastClose < cluster.price * (1 - threshold);
+      levels.push({ price: cluster.price, type: 'support', touches: cluster.touches, isBroken });
     }
   });
 

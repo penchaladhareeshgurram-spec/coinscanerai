@@ -13,6 +13,7 @@ export interface Zone {
   bottom: number;
   startTime: number | string;
   endTime?: number | string;
+  isBroken?: boolean;
 }
 
 export function detectDemandSupply(data: OHLCV[]): Zone[] {
@@ -32,11 +33,19 @@ export function detectDemandSupply(data: OHLCV[]): Zone[] {
     if (body < range * 0.5 && next1.close > next1.open && next2.close > next2.open) {
       const moveUp = next2.close - curr.low;
       if (moveUp > range * 2) {
+        let isBroken = false;
+        for (let k = i + 3; k < data.length; k++) {
+          if (data[k].close < curr.low) {
+            isBroken = true;
+            break;
+          }
+        }
         zones.push({
           type: 'demand',
           top: Math.max(curr.open, curr.close),
           bottom: curr.low,
           startTime: curr.time,
+          isBroken
         });
       }
     }
@@ -45,11 +54,19 @@ export function detectDemandSupply(data: OHLCV[]): Zone[] {
     if (body < range * 0.5 && next1.close < next1.open && next2.close < next2.open) {
       const moveDown = curr.high - next2.close;
       if (moveDown > range * 2) {
+        let isBroken = false;
+        for (let k = i + 3; k < data.length; k++) {
+          if (data[k].close > curr.high) {
+            isBroken = true;
+            break;
+          }
+        }
         zones.push({
           type: 'supply',
           top: curr.high,
           bottom: Math.min(curr.open, curr.close),
           startTime: curr.time,
+          isBroken
         });
       }
     }

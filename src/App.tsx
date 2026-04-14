@@ -4,7 +4,7 @@ import {
   TrendingUp, TrendingDown, Zap, Bell, Search,
   Play, Square, AlertTriangle, GitBranch, Plus, Save, PlayCircle, X,
   Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight,
-  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal
+  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal, XCircle
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -129,6 +129,7 @@ export default function App() {
 
   const [marketsData, setMarketsData] = useState(initialMarketsData);
   const [activeTrades, setActiveTrades] = useState(initialActiveTrades);
+  const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const [holdingsData, setHoldingsData] = useState(initialHoldingsData);
   const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
   const [performanceData, setPerformanceData] = useState(initialPerformanceData);
@@ -169,7 +170,7 @@ export default function App() {
       if (triggered) {
         alertsTriggered = true;
         setNotificationsData(prev => [{
-          id: Date.now(),
+          id: Date.now() + Math.random(),
           type: 'ALERT',
           asset: alert.asset,
           price: `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -193,7 +194,8 @@ export default function App() {
     orderbook,
     activeTrades,
     setActiveTrades,
-    isDemoMode ? setDemoBalance : setLiveBalance
+    isDemoMode ? setDemoBalance : setLiveBalance,
+    setTradeHistory
   );
 
   const handleManualTrade = (asset: string, type: 'LONG' | 'SHORT') => {
@@ -616,12 +618,12 @@ export default function App() {
 
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
-          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
-          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} onSetAlert={(asset, targetPrice, condition) => {
-            setPriceAlerts(prev => [...prev, { id: Date.now().toString(), asset, targetPrice, condition, active: true }]);
+          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} tradeHistory={tradeHistory} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
+          {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} priceAlerts={priceAlerts} onRemoveAlert={(id) => setPriceAlerts(prev => prev.filter(a => a.id !== id))} onSetAlert={(asset, targetPrice, condition) => {
+            setPriceAlerts(prev => [...prev, { id: Date.now().toString() + Math.random(), asset, targetPrice, condition, active: true }]);
             setShowNotifications(true);
             setNotificationsData(prev => [{
-              id: Date.now(),
+              id: Date.now() + Math.random(),
               type: 'INFO',
               asset: 'SYSTEM',
               price: '',
@@ -644,9 +646,10 @@ export default function App() {
 }
 
 // --- Dashboard View Component ---
-function DashboardView({ botActive, setBotActive, activeTrades, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade, aiLogs }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, aiLogs: any[] }) {
+function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade, aiLogs }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], tradeHistory?: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, aiLogs: any[] }) {
   const currentBalance = isDemoMode ? demoBalance : liveBalance;
   const [logFilter, setLogFilter] = useState<'ALL' | 'TRADE' | 'RISK' | 'INFO'>('ALL');
+  const [tradesTab, setTradesTab] = useState<'active' | 'history'>('active');
   
   // Format history for Candlestick chart
   const btcHistory = marketsData['BTC/USD']?.history.map((h: any, i: number, arr: any[]) => {
@@ -856,44 +859,101 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
       </div>
 
       <div className="flex flex-col xl:flex-row gap-6">
-        {/* Active Trades */}
+        {/* Active Trades / History */}
         <div className="panel flex-1 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-[#262626] flex justify-between items-center">
-            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Active AI Trades</h2>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setTradesTab('active')}
+                className={`text-sm font-semibold uppercase tracking-wider transition-colors ${tradesTab === 'active' ? 'text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+              >
+                Active AI Trades
+              </button>
+              <button 
+                onClick={() => setTradesTab('history')}
+                className={`text-sm font-semibold uppercase tracking-wider transition-colors ${tradesTab === 'history' ? 'text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+              >
+                History
+              </button>
+            </div>
             <button className="text-xs text-blue-500 hover:text-blue-400 font-medium">View All</button>
           </div>
           
           <div className="overflow-x-auto">
             <div className="min-w-[600px]">
-              <div className="grid grid-cols-6 col-header">
-                <div className="col-span-1">Asset</div>
-                <div className="col-span-1">Type</div>
-                <div className="col-span-1">Entry</div>
-                <div className="col-span-1">Current</div>
-                <div className="col-span-1">Risk</div>
-                <div className="col-span-1 text-right">PNL</div>
-              </div>
-              
-              {activeTrades.map((trade) => (
-                <div key={trade.id} className="grid grid-cols-6 data-row items-center">
-                  <div className="col-span-1 flex items-center gap-2">
-                    <div className={`w-1.5 h-1.5 rounded-full ${trade.type === 'LONG' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                    <span className="font-semibold text-sm">{trade.asset}</span>
+              {tradesTab === 'active' ? (
+                <>
+                  <div className="grid grid-cols-6 col-header">
+                    <div className="col-span-1">Asset</div>
+                    <div className="col-span-1">Type</div>
+                    <div className="col-span-1">Entry</div>
+                    <div className="col-span-1">Current</div>
+                    <div className="col-span-1">Risk</div>
+                    <div className="col-span-1 text-right">PNL</div>
                   </div>
-                  <div className="col-span-1">
-                    <span className={`text-xs px-2 py-1 rounded font-mono ${trade.type === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
-                      {trade.type}
-                    </span>
+                  
+                  {activeTrades.length === 0 && (
+                    <div className="p-8 text-center text-[#A3A3A3] text-sm">No active trades</div>
+                  )}
+
+                  {activeTrades.map((trade) => (
+                    <div key={trade.id} className="grid grid-cols-6 data-row items-center">
+                      <div className="col-span-1 flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${trade.type === 'LONG' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                        <span className="font-semibold text-sm">{trade.asset}</span>
+                      </div>
+                      <div className="col-span-1">
+                        <span className={`text-xs px-2 py-1 rounded font-mono ${trade.type === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                          {trade.type}
+                        </span>
+                      </div>
+                      <div className="col-span-1 data-value text-[#A3A3A3]">{trade.entry}</div>
+                      <div className="col-span-1 data-value">{trade.current}</div>
+                      <div className="col-span-1 data-value text-[#A3A3A3]">{trade.risk}</div>
+                      <div className={`col-span-1 text-right data-value ${trade.pnlVal >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {trade.pnlVal >= 0 ? '+' : ''}${Math.abs(trade.pnlVal).toFixed(2)}
+                        <span className="block text-[10px] opacity-70">{trade.pnl}</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-6 col-header">
+                    <div className="col-span-1">Asset</div>
+                    <div className="col-span-1">Type</div>
+                    <div className="col-span-1">Entry</div>
+                    <div className="col-span-1">Exit</div>
+                    <div className="col-span-1">Reason</div>
+                    <div className="col-span-1 text-right">PNL</div>
                   </div>
-                  <div className="col-span-1 data-value text-[#A3A3A3]">{trade.entry}</div>
-                  <div className="col-span-1 data-value">{trade.current}</div>
-                  <div className="col-span-1 data-value text-[#A3A3A3]">{trade.risk}</div>
-                  <div className={`col-span-1 text-right data-value ${trade.pnlVal >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {trade.pnlVal >= 0 ? '+' : ''}${Math.abs(trade.pnlVal).toFixed(2)}
-                    <span className="block text-[10px] opacity-70">{trade.pnl}</span>
-                  </div>
-                </div>
-              ))}
+                  
+                  {(!tradeHistory || tradeHistory.length === 0) && (
+                    <div className="p-8 text-center text-[#A3A3A3] text-sm">No trade history</div>
+                  )}
+
+                  {tradeHistory?.map((trade) => (
+                    <div key={trade.id} className="grid grid-cols-6 data-row items-center">
+                      <div className="col-span-1 flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${trade.type === 'LONG' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                        <span className="font-semibold text-sm">{trade.asset}</span>
+                      </div>
+                      <div className="col-span-1">
+                        <span className={`text-xs px-2 py-1 rounded font-mono ${trade.type === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                          {trade.type}
+                        </span>
+                      </div>
+                      <div className="col-span-1 data-value text-[#A3A3A3]">{trade.entry}</div>
+                      <div className="col-span-1 data-value">{trade.exitPrice?.toFixed(2)}</div>
+                      <div className="col-span-1 data-value text-[#A3A3A3]">{trade.closeReason}</div>
+                      <div className={`col-span-1 text-right data-value ${trade.pnlVal >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {trade.pnlVal >= 0 ? '+' : ''}${Math.abs(trade.pnlVal).toFixed(2)}
+                        <span className="block text-[10px] opacity-70">{trade.pnl}</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -918,8 +978,24 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
                       {signal.type}
                     </span>
                   </div>
-                  <div className="flex items-center text-xs font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                    <Target className="w-3 h-3 mr-1" /> {signal.probability}% Prob
+                  <div className="flex flex-col items-end gap-1">
+                    <div className={`flex items-center text-xs font-mono px-1.5 py-0.5 rounded ${
+                      signal.probability >= 85 ? 'text-emerald-400 bg-emerald-500/10' : 
+                      signal.probability >= 75 ? 'text-blue-400 bg-blue-500/10' : 
+                      'text-yellow-400 bg-yellow-500/10'
+                    }`}>
+                      <Target className="w-3 h-3 mr-1" /> {signal.probability}% Prob
+                    </div>
+                    <div className="w-16 h-1 bg-[#262626] rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full ${
+                          signal.probability >= 85 ? 'bg-emerald-500' : 
+                          signal.probability >= 75 ? 'bg-blue-500' : 
+                          'bg-yellow-500'
+                        }`}
+                        style={{ width: `${signal.probability}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
                 <p className="text-xs text-[#A3A3A3] leading-relaxed mb-2">{signal.reason}</p>
@@ -942,7 +1018,7 @@ function DashboardView({ botActive, setBotActive, activeTrades, performanceData,
 }
 
 // --- Markets View Component (Live Updating) ---
-function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any, onSetAlert?: (asset: string, targetPrice: number, condition: 'above' | 'below') => void }) {
+function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceAlerts, onRemoveAlert }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any, onSetAlert?: (asset: string, targetPrice: number, condition: 'above' | 'below') => void, priceAlerts?: any[], onRemoveAlert?: (id: string) => void }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
@@ -954,6 +1030,8 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { ma
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
+  
+  const activeAlertsForMarket = priceAlerts?.filter(a => a.asset === selectedMarket && a.active) || [];
 
   // Update alert price default when market changes if not set
   useEffect(() => {
@@ -1152,6 +1230,30 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert }: { ma
                     >
                       Create Alert
                     </button>
+                    
+                    {activeAlertsForMarket.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-[#262626]">
+                        <h4 className="text-xs font-semibold text-[#A3A3A3] mb-2">Active Alerts</h4>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {activeAlertsForMarket.map(alert => (
+                            <div key={alert.id} className="flex items-center justify-between bg-[#1A1A1A] p-2 rounded-md border border-[#262626]">
+                              <div className="text-xs">
+                                <span className={alert.condition === 'above' ? 'text-emerald-500' : 'text-red-500'}>
+                                  {alert.condition === 'above' ? '≥' : '≤'}
+                                </span>
+                                <span className="ml-1 font-mono">${alert.targetPrice.toLocaleString()}</span>
+                              </div>
+                              <button 
+                                onClick={() => onRemoveAlert && onRemoveAlert(alert.id)}
+                                className="text-[#A3A3A3] hover:text-red-500"
+                              >
+                                <XCircle className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
