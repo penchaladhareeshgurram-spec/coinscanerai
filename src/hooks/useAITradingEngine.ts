@@ -170,5 +170,5 @@ export const useAITradingEngine = (
 
   }, [botActive, prices, orderbook]);
 
-  return { aiLogs };
+  return { aiLogs, log };
 };

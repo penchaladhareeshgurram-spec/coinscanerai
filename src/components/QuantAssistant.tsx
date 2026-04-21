@@ -24,7 +24,7 @@ function getAIClient(): GoogleGenAI {
   return aiClient;
 }
 
-export function QuantAssistant() {
+export function QuantAssistant({ onExecuteTrade }: { onExecuteTrade?: (tradeParams: any) => void }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -43,6 +43,17 @@ export function QuantAssistant() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const handleConfirm = (msgId: string, tradeParams: any) => {
+    if (onExecuteTrade) {
+      onExecuteTrade(tradeParams);
+    }
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, type: undefined, content: "Trade executed successfully." } : m));
+  };
+
+  const handleCancel = (msgId: string) => {
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, type: undefined, content: "Trade execution cancelled." } : m));
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -177,10 +188,16 @@ export function QuantAssistant() {
                     <div className="text-[#737373]">Size:</div><div className="text-white text-right">{msg.data.size}</div>
                   </div>
                   <div className="flex gap-2">
-                    <button className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition-colors">
+                    <button 
+                      onClick={() => handleConfirm(msg.id, msg.data)}
+                      className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-black py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                    >
                       <CheckCircle2 className="w-3 h-3" /> CONFIRM
                     </button>
-                    <button className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition-colors">
+                    <button 
+                      onClick={() => handleCancel(msg.id)}
+                      className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 py-1.5 rounded text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                    >
                       <XCircle className="w-3 h-3" /> CANCEL
                     </button>
                   </div>

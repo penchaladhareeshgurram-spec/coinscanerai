@@ -14,13 +14,19 @@ export const useDeltaExchange = () => {
 
       ws.onopen = () => {
         console.log('Connected to Delta Exchange WS');
+        const symbols = [
+          'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT',
+          'DOGEUSDT', 'DOTUSDT', 'LINKUSDT', 'MATICUSDT', 'AVAXUSDT',
+          'SHIBUSDT', 'LTCUSDT', 'UNIUSDT', 'ATOMUSDT', 'NEARUSDT', 'ICPUSDT'
+        ];
+        
         ws.send(JSON.stringify({
           type: 'subscribe',
           payload: {
             channels: [
-              { name: 'v2/ticker', symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT'] },
-              { name: 'l2_orderbook', symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT'] },
-              { name: 'v2/trades', symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT', 'ADAUSDT'] }
+              { name: 'v2/ticker', symbols },
+              { name: 'l2_orderbook', symbols },
+              { name: 'v2/trades', symbols }
             ]
           }
         }));

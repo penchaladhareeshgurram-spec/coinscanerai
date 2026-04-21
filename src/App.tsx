@@ -20,6 +20,7 @@ import { useAITradingEngine } from './hooks/useAITradingEngine';
 import { NewsFeed } from './components/NewsFeed';
 import { QuantAssistant } from './components/QuantAssistant';
 import { PendingApprovals } from './components/PendingApprovals';
+import { useBinanceKlines } from './hooks/useBinanceKlines';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -44,6 +45,17 @@ const initialMarketsData = {
   'XRP/USD': { name: 'Ripple', price: 0.62, change: 1.1, history: generateHistory(0.62, 0.01, 60), liquidity: 500000000, spread: 0.1 },
   'BNB/USD': { name: 'Binance Coin', price: 580.20, change: -0.5, history: generateHistory(580, 2, 60), liquidity: 620000000, spread: 0.03 },
   'ADA/USD': { name: 'Cardano', price: 0.45, change: 0.8, history: generateHistory(0.45, 0.005, 60), liquidity: 300000000, spread: 0.15 },
+  'DOGE/USD': { name: 'Dogecoin', price: 0.15, change: 4.2, history: generateHistory(0.15, 0.001, 60), liquidity: 450000000, spread: 0.2 },
+  'DOT/USD': { name: 'Polkadot', price: 7.20, change: 1.5, history: generateHistory(7.20, 0.1, 60), liquidity: 250000000, spread: 0.08 },
+  'LINK/USD': { name: 'Chainlink', price: 18.50, change: 2.1, history: generateHistory(18.50, 0.2, 60), liquidity: 350000000, spread: 0.05 },
+  'MATIC/USD': { name: 'Polygon', price: 0.95, change: -1.2, history: generateHistory(0.95, 0.01, 60), liquidity: 280000000, spread: 0.1 },
+  'AVAX/USD': { name: 'Avalanche', price: 45.30, change: 3.5, history: generateHistory(45.30, 0.5, 60), liquidity: 400000000, spread: 0.06 },
+  'SHIB/USD': { name: 'Shiba Inu', price: 0.000025, change: 8.4, history: generateHistory(0.000025, 0.000001, 60), liquidity: 550000000, spread: 0.5 },
+  'LTC/USD': { name: 'Litecoin', price: 85.40, change: 0.5, history: generateHistory(85.40, 0.8, 60), liquidity: 200000000, spread: 0.04 },
+  'UNI/USD': { name: 'Uniswap', price: 11.20, change: -2.1, history: generateHistory(11.20, 0.15, 60), liquidity: 150000000, spread: 0.12 },
+  'ATOM/USD': { name: 'Cosmos', price: 12.80, change: 1.2, history: generateHistory(12.80, 0.1, 60), liquidity: 180000000, spread: 0.09 },
+  'NEAR/USD': { name: 'NEAR Protocol', price: 6.50, change: 4.8, history: generateHistory(6.50, 0.08, 60), liquidity: 220000000, spread: 0.07 },
+  'ICP/USD': { name: 'Internet Computer', price: 14.20, change: 0.9, history: generateHistory(14.20, 0.2, 60), liquidity: 130000000, spread: 0.11 },
   'EUR/USD': { name: 'Euro / US Dollar', price: 1.0850, change: 0.1, history: generateHistory(1.0850, 0.001, 60), liquidity: 5000000000, spread: 0.005 },
   'GBP/USD': { name: 'British Pound / US Dollar', price: 1.2650, change: -0.2, history: generateHistory(1.2650, 0.001, 60), liquidity: 4000000000, spread: 0.008 },
   'USD/JPY': { name: 'US Dollar / Japanese Yen', price: 151.20, change: 0.5, history: generateHistory(151.20, 0.1, 60), liquidity: 4500000000, spread: 0.01 },
@@ -188,7 +200,7 @@ export default function App() {
     }
   }, [marketsData, priceAlerts]);
 
-  const { aiLogs } = useAITradingEngine(
+  const { aiLogs, log: aiLog } = useAITradingEngine(
     botActive,
     prices,
     orderbook,
@@ -197,6 +209,36 @@ export default function App() {
     isDemoMode ? setDemoBalance : setLiveBalance,
     setTradeHistory
   );
+
+  const handleExecuteTrade = (tradeParams: any) => {
+    const newTrade = {
+      id: `TRD-${Math.floor(Math.random() * 10000)}`,
+      asset: tradeParams.asset,
+      type: tradeParams.type,
+      entry: tradeParams.entry,
+      current: tradeParams.entry,
+      pnl: '+0.00%',
+      pnlVal: 0.00,
+      risk: tradeParams.risk || 'Manual',
+      maxPnl: 0,
+      sl: tradeParams.stopLoss,
+      tp: tradeParams.takeProfit,
+      size: parseFloat(tradeParams.size) || 1
+    };
+
+    setActiveTrades(prev => [newTrade, ...prev]);
+    
+    aiLog(`[TRADE] Executed ${tradeParams.type} on ${tradeParams.asset} at ${tradeParams.entry}`, 'TRADE');
+    
+    setNotificationsData(nPrev => [{
+      id: Date.now(),
+      type: tradeParams.type === 'LONG' ? 'BUY' : 'SELL',
+      asset: tradeParams.asset,
+      price: `$${tradeParams.entry.toLocaleString()}`,
+      time: 'Just now',
+      msg: `AI Assistant executed ${tradeParams.type} position on ${tradeParams.asset}.`
+    }, ...nPrev].slice(0, 20));
+  };
 
   const handleManualTrade = (asset: string, type: 'LONG' | 'SHORT') => {
     const market = marketsData[asset as keyof typeof marketsData];
@@ -618,7 +660,7 @@ export default function App() {
 
         {/* Dynamic Content Area */}
         <div className="flex-1 overflow-auto p-4 md:p-6 relative z-0">
-          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} tradeHistory={tradeHistory} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} />}
+          {activeTab === 'dashboard' && <DashboardView botActive={botActive} setBotActive={setBotActive} activeTrades={activeTrades} tradeHistory={tradeHistory} performanceData={performanceData} marketsData={marketsData} isDemoMode={isDemoMode} demoBalance={demoBalance} liveBalance={liveBalance} onManualTrade={handleManualTrade} aiLogs={aiLogs} onExecuteTrade={handleExecuteTrade} />}
           {activeTab === 'markets' && <MarketsView marketsData={marketsData} onManualTrade={handleManualTrade} orderbook={orderbook} priceAlerts={priceAlerts} onRemoveAlert={(id) => setPriceAlerts(prev => prev.filter(a => a.id !== id))} onSetAlert={(asset, targetPrice, condition) => {
             setPriceAlerts(prev => [...prev, { id: Date.now().toString() + Math.random(), asset, targetPrice, condition, active: true }]);
             setShowNotifications(true);
@@ -632,7 +674,7 @@ export default function App() {
             }, ...prev]);
           }} />}
           {activeTab === 'whales' && <WhaleTrackerView whales={currentWhales} />}
-          {activeTab === 'strategy' && <StrategyBuilderView />}
+          {activeTab === 'strategy' && <StrategyBuilderView onExecuteTrade={handleExecuteTrade} />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
           {activeTab === 'risk' && <RiskManagementView />}
           {activeTab === 'settings' && <SettingsView onLogout={() => setIsAuthenticated(false)} />}
@@ -646,32 +688,13 @@ export default function App() {
 }
 
 // --- Dashboard View Component ---
-function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade, aiLogs }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], tradeHistory?: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, aiLogs: any[] }) {
+function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, performanceData, marketsData, isDemoMode, demoBalance, liveBalance, onManualTrade, aiLogs, onExecuteTrade }: { botActive: boolean, setBotActive: (val: boolean) => void, activeTrades: any[], tradeHistory?: any[], performanceData: any[], marketsData: any, isDemoMode: boolean, demoBalance: number, liveBalance: number, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, aiLogs: any[], onExecuteTrade?: (tradeParams: any) => void }) {
   const currentBalance = isDemoMode ? demoBalance : liveBalance;
   const [logFilter, setLogFilter] = useState<'ALL' | 'TRADE' | 'RISK' | 'INFO'>('ALL');
   const [tradesTab, setTradesTab] = useState<'active' | 'history'>('active');
   
-  // Format history for Candlestick chart
-  const btcHistory = marketsData['BTC/USD']?.history.map((h: any, i: number, arr: any[]) => {
-    const prevPrice = i > 0 ? arr[i-1].price : h.price;
-    const open = prevPrice;
-    const close = h.price;
-    const high = Math.max(open, close) + (Math.random() * 50);
-    const low = Math.min(open, close) - (Math.random() * 50);
-    
-    // Create a valid timestamp (seconds) for lightweight-charts
-    // Start from current time minus (length - i) * 10 seconds
-    const now = Math.floor(Date.now() / 1000);
-    const time = now - ((arr.length - i) * 10);
-    
-    return {
-      time,
-      open,
-      high,
-      low,
-      close
-    };
-  }) || [];
+  // Real Binance historical and live OHLCV data
+  const btcHistory = useBinanceKlines('BTCUSDT', '1m');
 
   const filteredLogs = aiLogs.filter(log => logFilter === 'ALL' || log.type === logFilter);
 
@@ -711,7 +734,7 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
         </div>
         <div className="flex flex-col lg:flex-row gap-6 h-[400px]">
           <div className="flex-1 bg-[#0A0A0A] rounded-lg overflow-hidden border border-[#262626]">
-            <CandlestickChart data={btcHistory} currentPrice={marketsData['BTC/USD']?.price} />
+            <CandlestickChart data={btcHistory as any} currentPrice={marketsData['BTC/USD']?.price} />
           </div>
           <div className="w-full lg:w-1/3 flex flex-col bg-[#0A0A0A] rounded-lg border border-[#262626] font-mono text-xs overflow-hidden">
             <div className="flex items-center justify-between p-3 border-b border-[#262626] bg-[#141414]">
@@ -1048,7 +1071,10 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
     }
   };
 
-  const marketHistory = market.history.map((h: any, i: number, arr: any[]) => {
+  const binanceSymbol = selectedMarket.replace('/', '') + 'T'; // e.g. BTC/USD -> BTCUSDT
+  const realHistory = useBinanceKlines(binanceSymbol, '1m');
+
+  const marketHistory = realHistory.length > 0 ? realHistory : market.history.map((h: any, i: number, arr: any[]) => {
     const prevPrice = i > 0 ? arr[i-1].price : h.price;
     const open = prevPrice;
     const close = h.price;
@@ -1269,7 +1295,7 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
         </div>
         <div className="flex-1 bg-[#0A0A0A] relative">
           <CandlestickChart 
-            data={marketHistory} 
+            data={marketHistory as any} 
             currentPrice={market.price} 
             showDemandSupply={showDemandSupply}
             showSupportResistance={showSupportResistance}
@@ -1336,7 +1362,7 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
 }
 
 // --- Strategy Builder View Component ---
-function StrategyBuilderView() {
+function StrategyBuilderView({ onExecuteTrade }: { onExecuteTrade?: (tradeParams: any) => void }) {
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
   const [manualOverride, setManualOverride] = useState(true);
 
@@ -1486,7 +1512,7 @@ if bearish_signal
 
         {/* Right Side: Quant Assistant */}
         <div className="lg:col-span-1 h-[600px] lg:h-auto">
-          <QuantAssistant />
+          <QuantAssistant onExecuteTrade={onExecuteTrade} />
         </div>
       </div>
     </div>
