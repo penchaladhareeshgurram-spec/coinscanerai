@@ -1,4 +1,11 @@
-import { OHLCV } from './demandSupply';
+export interface OHLCV {
+  time: number | string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
 
 export interface LiquidityPool {
   type: 'buy-side' | 'sell-side';
@@ -66,5 +73,12 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
     }
   });
 
-  return uniquePools;
+  const currentPrice = data[data.length - 1].close;
+  const activePools = uniquePools.filter(p => !p.isSwept);
+
+  // Return the 3 closest buy-side (above price) and 3 closest sell-side (below price)
+  const buySide = activePools.filter(p => p.type === 'buy-side' && p.price >= currentPrice).sort((a, b) => a.price - b.price).slice(0, 3);
+  const sellSide = activePools.filter(p => p.type === 'sell-side' && p.price <= currentPrice).sort((a, b) => b.price - a.price).slice(0, 3);
+
+  return [...buySide, ...sellSide];
 }

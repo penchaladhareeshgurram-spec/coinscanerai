@@ -1,7 +1,5 @@
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time, LineStyle, IPriceLine } from 'lightweight-charts';
 import React, { useEffect, useRef } from 'react';
-import { detectDemandSupply } from '../indicators/demandSupply';
-import { detectSupportResistance } from '../indicators/supportResistance';
 import { detectLiquidityPools } from '../indicators/liquidityPools';
 
 interface CandlestickData {
@@ -21,9 +19,10 @@ interface CandlestickChartProps {
     upColor?: string;
     downColor?: string;
   };
-  showDemandSupply?: boolean;
-  showSupportResistance?: boolean;
   showLiquidityPools?: boolean;
+  isDrawingLiqMode?: boolean;
+  manualLiqLines?: number[];
+  onLiqDrawn?: (price: number) => void;
 }
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
@@ -35,9 +34,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     upColor = '#10B981',
     downColor = '#EF4444',
   } = {},
-  showDemandSupply = true,
-  showSupportResistance = true,
   showLiquidityPools = true,
+  isDrawingLiqMode = false,
+  manualLiqLines = [],
+  onLiqDrawn,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -122,6 +122,35 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     };
   }, [backgroundColor, textColor, upColor, downColor]);
 
+  // Handle click for manual drawings
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current) return;
+    
+    const clickHandler = (param: any) => {
+      if (!param.point) return;
+      
+      const price = seriesRef.current!.coordinateToPrice(param.point.y);
+      if (price !== null) {
+        if (isDrawingLiqMode && onLiqDrawn) {
+          onLiqDrawn(price);
+        }
+      }
+    };
+    
+    chartRef.current.subscribeClick(clickHandler);
+    
+    // Change cursor based on drawing mode
+    if (chartContainerRef.current) {
+      chartContainerRef.current.style.cursor = isDrawingLiqMode ? 'crosshair' : 'default';
+    }
+
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.unsubscribeClick(clickHandler);
+      }
+    };
+  }, [isDrawingLiqMode, onLiqDrawn]);
+
   // Handle data updates and indicators
   useEffect(() => {
     if (!seriesRef.current || data.length === 0) return;
@@ -133,69 +162,40 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     priceLinesRef.current = [];
 
     // Calculate and add indicators
-    if (showDemandSupply) {
-      const zones = detectDemandSupply(data as any);
-      zones.forEach(zone => {
-        const color = zone.isBroken ? 'rgba(156, 163, 175, 0.5)' : (zone.type === 'demand' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)');
-        const title = zone.isBroken ? `Broken ${zone.type}` : (zone.type === 'demand' ? 'Demand' : 'Supply');
-        const style = zone.isBroken ? LineStyle.Dotted : LineStyle.Solid;
-        
-        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
-          price: zone.top,
-          color: color,
-          lineWidth: 1,
-          lineStyle: style,
-          axisLabelVisible: true,
-          title: `${title} Top`,
-        }));
-        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
-          price: zone.bottom,
-          color: color,
-          lineWidth: 1,
-          lineStyle: style,
-          axisLabelVisible: true,
-          title: `${title} Btm`,
-        }));
-      });
-    }
-
-    if (showSupportResistance) {
-      const levels = detectSupportResistance(data as any);
-      levels.forEach(level => {
-        const color = level.isBroken ? 'rgba(156, 163, 175, 0.5)' : (level.type === 'support' ? '#3B82F6' : '#F59E0B');
-        const title = level.isBroken ? `Broken ${level.type}` : (level.type === 'support' ? 'Support' : 'Resistance');
-        const style = level.isBroken ? LineStyle.Dotted : LineStyle.Dashed;
-
-        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
-          price: level.price,
-          color: color,
-          lineWidth: 2,
-          lineStyle: style,
-          axisLabelVisible: true,
-          title: title,
-        }));
-      });
-    }
+    const currentPriceVal = data.length > 0 ? (data[data.length - 1] as any).close : 0;
 
     if (showLiquidityPools) {
-      const pools = detectLiquidityPools(data as any);
-      pools.forEach(pool => {
-        const color = pool.isSwept ? 'rgba(156, 163, 175, 0.5)' : '#8B5CF6';
-        const title = pool.isSwept ? 'Swept Liq' : (pool.type === 'buy-side' ? 'Buy Liq' : 'Sell Liq');
-        const style = pool.isSwept ? LineStyle.Dotted : LineStyle.LargeDashed;
-
+      const activePools = detectLiquidityPools(data as any);
+      
+      activePools.forEach(pool => {
+        const color = pool.type === 'buy-side' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)';
+        const title = pool.type === 'buy-side' ? 'Buy Liq' : 'Sell Liq';
+        
         priceLinesRef.current.push(seriesRef.current!.createPriceLine({
           price: pool.price,
           color: color,
           lineWidth: 1,
-          lineStyle: style,
+          lineStyle: LineStyle.LargeDashed,
           axisLabelVisible: true,
           title: title,
         }));
       });
     }
 
-  }, [data, showDemandSupply, showSupportResistance, showLiquidityPools]);
+    if (manualLiqLines && manualLiqLines.length > 0) {
+      manualLiqLines.forEach(linePrice => {
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: linePrice,
+          color: '#A855F7',
+          lineWidth: 2,
+          lineStyle: LineStyle.LargeDashed,
+          axisLabelVisible: true,
+          title: 'Manual Liq',
+        }));
+      });
+    }
+
+  }, [data, showLiquidityPools, manualLiqLines]);
 
   // Update the last candle with the current live price
   useEffect(() => {

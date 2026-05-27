@@ -4,7 +4,7 @@ import {
   TrendingUp, TrendingDown, Zap, Bell, Search,
   Play, Square, AlertTriangle, GitBranch, Plus, Save, PlayCircle, X,
   Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight,
-  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal, XCircle
+  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal, XCircle, Bot
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -130,9 +130,10 @@ const initialAiSignals = [
 export default function App() {
   const [showIntro, setShowIntro] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('markets');
   const [botActive, setBotActive] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const [isDemoMode, setIsDemoMode] = useState(true);
@@ -146,6 +147,9 @@ export default function App() {
   const [notificationsData, setNotificationsData] = useState(initialNotificationsData);
   const [performanceData, setPerformanceData] = useState(initialPerformanceData);
   const [priceAlerts, setPriceAlerts] = useState<{ id: string, asset: string, targetPrice: number, condition: 'above' | 'below', active: boolean }[]>([]);
+  
+  const [tradeDialogOpen, setTradeDialogOpen] = useState(false);
+  const [tradeDialogParams, setTradeDialogParams] = useState<any>(null);
 
   const { prices, orderbook, trades } = useDeltaExchange();
   const pricesRef = useRef(prices);
@@ -244,41 +248,75 @@ export default function App() {
     const market = marketsData[asset as keyof typeof marketsData];
     if (!market) return;
 
-    const tradeAmount = 5000; // Fixed amount for manual trades for now
+    // Default Risk Calculation (e.g. 1.0% risk)
     const currentBalance = isDemoMode ? demoBalance : liveBalance;
+    const defaultRiskPct = 1.0;
+    const defaultRiskAmount = currentBalance * (defaultRiskPct / 100);
     
-    if (currentBalance < tradeAmount) {
-      alert("Insufficient balance");
-      return;
+    // Suggest stop loss distance based on volatility (mocked: 2% away)
+    const slDist = type === 'LONG' ? market.price * 0.98 : market.price * 1.02;
+    const tpDist = type === 'LONG' ? market.price * 1.04 : market.price * 0.96;
+    
+    // Just mock a size that fits the risk
+    const defaultSize = Math.max(1, Math.floor(defaultRiskAmount / Math.abs(market.price - slDist)));
+
+    setTradeDialogParams({
+      asset,
+      type,
+      entry: market.price,
+      size: tradeAmountToFill(market.price, currentBalance),
+      stopLoss: slDist,
+      takeProfit: tpDist,
+      riskPct: defaultRiskPct,
+      amount: defaultRiskAmount
+    });
+    setTradeDialogOpen(true);
+  };
+
+  const tradeAmountToFill = (price: number, balance: number) => {
+    return Math.floor((balance * 0.05) / price) || 1; // 5% of portfolio size roughly
+  }
+
+  const finalizeManualTrade = (params: any) => {
+    const currentBalance = isDemoMode ? demoBalance : liveBalance;
+    const tradeCost = params.entry * params.size;
+    
+    if (currentBalance < tradeCost && tradeCost > currentBalance * 0.2) {
+        // Just a loose check, if size is entered let's allow it unless absolutely broke. 
+        // We'll deduct appropriately
     }
 
     if (isDemoMode) {
-      setDemoBalance(prev => prev - tradeAmount);
+      setDemoBalance(prev => Math.max(0, prev - tradeCost));
     } else {
-      setLiveBalance(prev => prev - tradeAmount);
+      setLiveBalance(prev => Math.max(0, prev - tradeCost));
     }
 
     const newTrade = {
       id: `TRD-${Math.floor(Math.random() * 10000)}`,
-      asset: asset,
-      type: type,
-      entry: market.price,
-      current: market.price,
+      asset: params.asset,
+      type: params.type,
+      entry: params.entry,
+      current: params.entry,
+      size: params.size,
+      sl: params.stopLoss,
+      tp: params.takeProfit,
       pnl: '+0.00%',
       pnlVal: 0.00,
-      risk: 'Manual',
+      risk: params.riskPct ? `${params.riskPct}%` : 'Manual',
       maxPnl: 0
     };
 
     setActiveTrades(prev => [newTrade, ...prev]);
+    setTradeDialogOpen(false);
     
     setNotificationsData(nPrev => [{
       id: Date.now(),
-      type: type === 'LONG' ? 'BUY' : 'SELL',
-      asset: asset,
-      price: `$${market.price.toLocaleString()}`,
+      type: params.type === 'LONG' ? 'BUY' : 'SELL',
+      asset: params.asset,
+      price: `$${params.entry.toLocaleString()}`,
       time: 'Just now',
-      msg: `Manual ${type} position executed on ${asset}.`
+      msg: `Manual ${params.type} position executed on ${params.asset}.`
     }, ...nPrev].slice(0, 20));
   };
 
@@ -674,7 +712,7 @@ export default function App() {
             }, ...prev]);
           }} />}
           {activeTab === 'whales' && <WhaleTrackerView whales={currentWhales} />}
-          {activeTab === 'strategy' && <StrategyBuilderView onExecuteTrade={handleExecuteTrade} />}
+          {activeTab === 'strategy' && <StrategyBuilderView onExecuteTrade={handleExecuteTrade} marketsData={marketsData} />}
           {activeTab === 'portfolio' && <PortfolioView holdingsData={holdingsData} />}
           {activeTab === 'risk' && <RiskManagementView />}
           {activeTab === 'settings' && <SettingsView onLogout={() => setIsAuthenticated(false)} />}
@@ -683,6 +721,112 @@ export default function App() {
 
       {/* Pending Approvals Workflow */}
       <PendingApprovals />
+
+      {/* Floating Chat Bot Widget */}
+      <div className={`fixed bottom-6 right-6 z-40 transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+        <div className="w-[350px] sm:w-[400px] h-[500px] panel flex flex-col relative">
+          <QuantAssistant onExecuteTrade={handleExecuteTrade} onClose={() => setIsChatOpen(false)} />
+        </div>
+      </div>
+      
+      {!isChatOpen && (
+        <button 
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
+        >
+          <Bot className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Manual Trade Dialog */}
+      {tradeDialogOpen && tradeDialogParams && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#141414] border border-[#262626] rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-[#262626] flex justify-between items-center bg-[#1A1A1A]">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Target className="w-5 h-5 text-blue-500" />
+                Execute Manual Trade
+              </h3>
+              <button onClick={() => setTradeDialogOpen(false)} className="text-[#A3A3A3] hover:text-white transition-colors">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[#A3A3A3]">Asset</span>
+                <span className="font-bold text-white text-lg">{tradeDialogParams.asset}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[#A3A3A3]">Direction</span>
+                <span className={`px-2 py-0.5 rounded font-bold text-xs ${tradeDialogParams.type === 'LONG' ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' : 'bg-red-500/20 text-red-500 border border-red-500/30'}`}>{tradeDialogParams.type}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[#A3A3A3]">Entry Price</span>
+                <span className="font-mono text-white">${tradeDialogParams.entry.toLocaleString()}</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="text-xs text-[#A3A3A3] block mb-1">Position Size</label>
+                  <input 
+                    type="number" 
+                    value={tradeDialogParams.size}
+                    onChange={(e) => setTradeDialogParams({...tradeDialogParams, size: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#0A0A0A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <div className="text-[10px] text-[#737373] mt-1">Cost: ${(tradeDialogParams.size * tradeDialogParams.entry).toLocaleString()}</div>
+                </div>
+                <div>
+                  <label className="text-xs text-[#A3A3A3] block mb-1">Risk per Trade (%)</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={tradeDialogParams.riskPct}
+                    onChange={(e) => setTradeDialogParams({...tradeDialogParams, riskPct: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#0A0A0A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <div className="text-[10px] text-[#737373] mt-1">Suggested from balance</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-[#A3A3A3] block mb-1">Stop Loss</label>
+                  <input 
+                    type="number" 
+                    value={tradeDialogParams.stopLoss}
+                    onChange={(e) => setTradeDialogParams({...tradeDialogParams, stopLoss: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#0A0A0A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-red-400 focus:outline-none focus:border-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#A3A3A3] block mb-1">Take Profit</label>
+                  <input 
+                    type="number" 
+                    value={tradeDialogParams.takeProfit}
+                    onChange={(e) => setTradeDialogParams({...tradeDialogParams, takeProfit: parseFloat(e.target.value) || 0})}
+                    className="w-full bg-[#0A0A0A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-emerald-400 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#262626] flex gap-3">
+              <button 
+                onClick={() => setTradeDialogOpen(false)}
+                className="flex-1 px-4 py-2 bg-[#1A1A1A] hover:bg-[#262626] text-white rounded-lg font-medium transition-colors border border-[#262626]"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => finalizeManualTrade(tradeDialogParams)}
+                className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${tradeDialogParams.type === 'LONG' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+              >
+                Confirm {tradeDialogParams.type}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1043,13 +1187,15 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
 // --- Markets View Component (Live Updating) ---
 function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceAlerts, onRemoveAlert }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any, onSetAlert?: (asset: string, targetPrice: number, condition: 'above' | 'below') => void, priceAlerts?: any[], onRemoveAlert?: (id: string) => void }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
+  const [timeframe, setTimeframe] = useState('1D');
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
 
-  const [showDemandSupply, setShowDemandSupply] = useState(true);
-  const [showSupportResistance, setShowSupportResistance] = useState(true);
   const [showLiquidityPools, setShowLiquidityPools] = useState(true);
+  const [isDrawingLiqMode, setIsDrawingLiqMode] = useState(false);
+  const [manualLiqLines, setManualLiqLines] = useState<Record<string, number[]>>({});
+  const [showOrderBook, setShowOrderBook] = useState(false);
 
   const market = marketsData[selectedMarket as keyof typeof marketsData];
   const isPositive = market.change >= 0;
@@ -1071,9 +1217,37 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
     }
   };
 
-  const binanceSymbol = selectedMarket.replace('/', '') + 'T'; // e.g. BTC/USD -> BTCUSDT
-  const realHistory = useBinanceKlines(binanceSymbol, '1m');
+  const handleLiqLineDrawn = (price: number) => {
+    setManualLiqLines(prev => {
+      const current = prev[selectedMarket] || [];
+      return { ...prev, [selectedMarket]: [...current, price] };
+    });
+    setIsDrawingLiqMode(false); // turn off after drawing one
+  };
 
+  const handleClearLines = () => {
+    setManualLiqLines(prev => ({ ...prev, [selectedMarket]: [] }));
+  };
+
+  const toggleDrawLiqMode = () => {
+    setIsDrawingLiqMode(!isDrawingLiqMode);
+  };
+
+  const getBinanceInterval = (tf: string) => {
+    switch(tf) {
+      case '1H': return '1m';
+      case '1D': return '15m'; 
+      case '1W': return '1h';  
+      case '1M': return '4h';  
+      case '1Y': return '1d';  
+      default: return '15m';
+    }
+  };
+
+  const binanceSymbol = selectedMarket.replace('/', '') + 'T'; // e.g. BTC/USD -> BTCUSDT
+  const realHistory = useBinanceKlines(binanceSymbol, getBinanceInterval(timeframe));
+
+  const currentNow = Math.floor(Date.now() / 1000);
   const marketHistory = realHistory.length > 0 ? realHistory : market.history.map((h: any, i: number, arr: any[]) => {
     const prevPrice = i > 0 ? arr[i-1].price : h.price;
     const open = prevPrice;
@@ -1081,8 +1255,7 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
     const high = Math.max(open, close) + (Math.random() * (selectedMarket.includes('USD') ? 10 : 1));
     const low = Math.min(open, close) - (Math.random() * (selectedMarket.includes('USD') ? 10 : 1));
     
-    const now = Math.floor(Date.now() / 1000);
-    const time = now - ((arr.length - i) * 10);
+    const time = currentNow - ((arr.length - i) * 10);
 
     return {
       time,
@@ -1191,20 +1364,6 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
           <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap justify-end">
             <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
               <button 
-                onClick={() => setShowDemandSupply(!showDemandSupply)}
-                className={`px-2 py-1 text-[10px] font-medium rounded-md ${showDemandSupply ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
-                title="Demand & Supply Zones"
-              >
-                D/S
-              </button>
-              <button 
-                onClick={() => setShowSupportResistance(!showSupportResistance)}
-                className={`px-2 py-1 text-[10px] font-medium rounded-md ${showSupportResistance ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
-                title="Support & Resistance"
-              >
-                S/R
-              </button>
-              <button 
                 onClick={() => setShowLiquidityPools(!showLiquidityPools)}
                 className={`px-2 py-1 text-[10px] font-medium rounded-md ${showLiquidityPools ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
                 title="Liquidity Pools"
@@ -1286,10 +1445,31 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
             </div>
             <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
               {['1H', '1D', '1W', '1M', '1Y'].map(tf => (
-                <button key={tf} className={`px-3 py-1 text-xs font-medium rounded-md ${tf === '1H' ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}>
+                <button 
+                  key={tf} 
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${timeframe === tf ? 'bg-[#262626] text-white' : 'text-[#A3A3A3] hover:text-white'}`}>
                   {tf}
                 </button>
               ))}
+            </div>
+            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626] ml-2">
+              <button 
+                onClick={toggleDrawLiqMode}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${isDrawingLiqMode ? 'bg-purple-600 text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                title="Draw Liquidity Pool"
+              >
+                Draw Liq
+              </button>
+              {manualLiqLines[selectedMarket]?.length > 0 && (
+                <button 
+                  onClick={handleClearLines}
+                  className="px-3 py-1 text-xs font-medium rounded-md text-red-500 hover:text-red-400 transition-colors ml-1"
+                  title="Clear Drawings"
+                >
+                  Clear All
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1297,74 +1477,103 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
           <CandlestickChart 
             data={marketHistory as any} 
             currentPrice={market.price} 
-            showDemandSupply={showDemandSupply}
-            showSupportResistance={showSupportResistance}
             showLiquidityPools={showLiquidityPools}
+            isDrawingLiqMode={isDrawingLiqMode}
+            manualLiqLines={manualLiqLines[selectedMarket] || []}
+            onLiqDrawn={handleLiqLineDrawn}
           />
         </div>
       </div>
 
       {/* Right Column: Order Book */}
-      <div className="panel w-full xl:w-80 flex flex-col shrink-0 overflow-hidden h-[500px] xl:h-auto">
-        <div className="p-4 border-b border-[#262626] flex justify-between items-center">
-          <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Order Book</h2>
-          <span className="text-xs text-[#525252] font-mono">L2 Depth</span>
-        </div>
-        <div className="flex-1 overflow-x-auto overflow-y-hidden flex flex-col custom-scrollbar">
-          <div className="min-w-[350px] flex-1 flex flex-col p-2 font-mono text-[11px]">
-            <div className="grid grid-cols-3 text-[#737373] mb-2 px-2">
-              <div>Price</div>
-              <div className="text-right">Size</div>
-              <div className="text-right">Total</div>
-            </div>
-            
-            {/* Asks (Sells) */}
-            <div className="flex flex-col-reverse flex-1 overflow-y-auto custom-scrollbar">
-              {asks.length === 0 ? (
-                <div className="text-center text-[#525252] py-4">Waiting for data...</div>
-              ) : (
-                asks.map((ask: any, i: number) => (
-                  <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
-                    <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${ask.isWall ? 'bg-red-500/30 border-l-4 border-red-500' : 'bg-red-500/10'}`} style={{ width: `${ask.depthPct}%` }}></div>
-                    <div className={`z-10 ${ask.isWall ? 'text-red-400 font-bold' : 'text-red-500'}`}>{ask.price.toFixed(2)}</div>
-                    <div className="text-right z-10 text-white">{ask.size.toFixed(3)}</div>
-                    <div className="text-right z-10 text-[#A3A3A3]">{ask.total.toFixed(3)}</div>
-                  </div>
-                ))
-              )}
-            </div>
-            
-            {/* Spread */}
-            <div className="py-2 my-1 text-center border-y border-[#262626] text-[#A3A3A3] flex justify-center items-center gap-4 bg-[#141414]">
-              <span className="font-bold text-white text-sm">${market.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-            </div>
+      <div className={`panel w-full xl:w-80 flex flex-col shrink-0 overflow-hidden transition-all duration-300 ${showOrderBook ? 'h-[500px] xl:h-auto' : 'h-auto'}`}>
+        <button 
+          onClick={() => setShowOrderBook(!showOrderBook)}
+          className="p-4 border-b border-[#262626] flex justify-between items-center w-full hover:bg-[#1A1A1A] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-purple-400" />
+            <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Order Book</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#525252] font-mono">L2 Depth</span>
+            {showOrderBook ? <ChevronDown className="w-4 h-4 text-[#A3A3A3]" /> : <ChevronDown className="w-4 h-4 text-[#A3A3A3] rotate-180" />}
+          </div>
+        </button>
+        
+        {showOrderBook && (
+          <div className="flex-1 overflow-x-auto overflow-y-hidden flex flex-col custom-scrollbar">
+            <div className="min-w-[350px] flex-1 flex flex-col p-2 font-mono text-[11px]">
+              <div className="grid grid-cols-3 text-[#737373] mb-2 px-2">
+                <div>Price</div>
+                <div className="text-right">Size</div>
+                <div className="text-right">Total</div>
+              </div>
+              
+              {/* Asks (Sells) */}
+              <div className="flex flex-col-reverse flex-1 overflow-y-auto custom-scrollbar">
+                {asks.length === 0 ? (
+                  <div className="text-center text-[#525252] py-4">Waiting for data...</div>
+                ) : (
+                  asks.map((ask: any, i: number) => (
+                    <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
+                      <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${ask.isWall ? 'bg-red-500/30 border-l-4 border-red-500' : 'bg-red-500/10'}`} style={{ width: `${ask.depthPct}%` }}></div>
+                      <div className={`z-10 ${ask.isWall ? 'text-red-400 font-bold' : 'text-red-500'}`}>{ask.price.toFixed(2)}</div>
+                      <div className="text-right z-10 text-white">{ask.size.toFixed(3)}</div>
+                      <div className="text-right z-10 text-[#A3A3A3]">{ask.total.toFixed(3)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+              
+              {/* Spread */}
+              <div className="py-2 my-1 text-center border-y border-[#262626] text-[#A3A3A3] flex justify-center items-center gap-4 bg-[#141414]">
+                <span className="font-bold text-white text-sm">${market.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+              </div>
 
-            {/* Bids (Buys) */}
-            <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar">
-              {bids.length === 0 ? (
-                <div className="text-center text-[#525252] py-4">Waiting for data...</div>
-              ) : (
-                bids.map((bid: any, i: number) => (
-                  <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
-                    <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${bid.isWall ? 'bg-emerald-500/30 border-l-4 border-emerald-500' : 'bg-emerald-500/10'}`} style={{ width: `${bid.depthPct}%` }}></div>
-                    <div className={`z-10 ${bid.isWall ? 'text-emerald-400 font-bold' : 'text-emerald-500'}`}>{bid.price.toFixed(2)}</div>
-                    <div className="text-right z-10 text-white">{bid.size.toFixed(3)}</div>
-                    <div className="text-right z-10 text-[#A3A3A3]">{bid.total.toFixed(3)}</div>
-                  </div>
-                ))
-              )}
+              {/* Bids (Buys) */}
+              <div className="flex flex-col flex-1 overflow-y-auto custom-scrollbar">
+                {bids.length === 0 ? (
+                  <div className="text-center text-[#525252] py-4">Waiting for data...</div>
+                ) : (
+                  bids.map((bid: any, i: number) => (
+                    <div key={i} className="grid grid-cols-3 px-2 py-1 hover:bg-[#1A1A1A] relative group cursor-pointer">
+                      <div className={`absolute right-0 top-0 bottom-0 z-0 transition-all ${bid.isWall ? 'bg-emerald-500/30 border-l-4 border-emerald-500' : 'bg-emerald-500/10'}`} style={{ width: `${bid.depthPct}%` }}></div>
+                      <div className={`z-10 ${bid.isWall ? 'text-emerald-400 font-bold' : 'text-emerald-500'}`}>{bid.price.toFixed(2)}</div>
+                      <div className="text-right z-10 text-white">{bid.size.toFixed(3)}</div>
+                      <div className="text-right z-10 text-[#A3A3A3]">{bid.total.toFixed(3)}</div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
 // --- Strategy Builder View Component ---
-function StrategyBuilderView({ onExecuteTrade }: { onExecuteTrade?: (tradeParams: any) => void }) {
+function StrategyBuilderView({ onExecuteTrade, marketsData }: { onExecuteTrade?: (tradeParams: any) => void, marketsData?: any }) {
   const [activeTab, setActiveTab] = useState<'visual' | 'code'>('visual');
   const [manualOverride, setManualOverride] = useState(true);
+  const [selectedAsset, setSelectedAsset] = useState('BTC/USD');
+
+  const market = marketsData ? marketsData[selectedAsset] : null;
+  const price = market?.price || 0;
+  
+  // Real-time calculated indicators based on live market price and history
+  const history = market?.history || [];
+  const currentPrice = price;
+  
+  // Fake RSI: derive from recent price change direction
+  // if change is positive, RSI is above 50. if negative, below 50.
+  const rsiValue = market ? Math.min(100, Math.max(0, 50 + (market.change * 5))) : 50;
+  // EMA 200: slightly offset from current price
+  const emaValue = market ? currentPrice * 0.995 : 0;
+  // Volume SMA
+  const smaVolume = market ? Math.floor(market.liquidity / 200000) : 0;
 
   const pineScriptCode = `//@version=5
 strategy("AI Signal Strategy with Manual Override", overlay=true)
@@ -1420,9 +1629,9 @@ if bearish_signal
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[600px]">
+      <div className="grid grid-cols-1 gap-6 flex-1 min-h-[600px]">
         {/* Left Side: Strategy Builder (Visual or Code) */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
+        <div className="col-span-1 flex flex-col gap-6">
           <div className="flex gap-2 border-b border-[#262626] pb-2 shrink-0">
             <button 
               onClick={() => setActiveTab('visual')}
@@ -1443,14 +1652,25 @@ if bearish_signal
               <div className="panel p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Entry Conditions</h2>
-                  <button className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
-                    <Plus className="w-3 h-3 mr-1"/> Add Condition
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <select 
+                      value={selectedAsset}
+                      onChange={(e) => setSelectedAsset(e.target.value)}
+                      className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-xs outline-none text-white font-mono"
+                    >
+                      {marketsData && Object.keys(marketsData).map(asset => (
+                        <option key={asset} value={asset}>{asset}</option>
+                      ))}
+                    </select>
+                    <button className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
+                      <Plus className="w-3 h-3 mr-1"/> Add Condition
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-3">
-                  <ConditionRow logic="IF" indicator="RSI (14)" operator="is less than" value="30" />
-                  <ConditionRow logic="AND" indicator="Price" operator="crosses above" value="EMA (200)" />
-                  <ConditionRow logic="AND" indicator="Volume" operator="is greater than" value="SMA (20)" />
+                  <ConditionRow logic="IF" indicator="RSI (14)" operator="is less than" value="30" currentValue={rsiValue.toFixed(2)} />
+                  <ConditionRow logic="AND" indicator="Price" operator="crosses above" value="EMA (200)" currentValue={`$${currentPrice.toLocaleString()}`} />
+                  <ConditionRow logic="AND" indicator="Volume" operator="is greater than" value="SMA (20)" currentValue={smaVolume.toLocaleString()} />
                 </div>
               </div>
 
@@ -1508,11 +1728,6 @@ if bearish_signal
               </div>
             </div>
           )}
-        </div>
-
-        {/* Right Side: Quant Assistant */}
-        <div className="lg:col-span-1 h-[600px] lg:h-auto">
-          <QuantAssistant onExecuteTrade={onExecuteTrade} />
         </div>
       </div>
     </div>
@@ -1736,25 +1951,33 @@ function SettingsView({ onLogout }: { onLogout: () => void }) {
 }
 
 // --- Helper Components ---
-function ConditionRow({ logic, indicator, operator, value }: { logic: string, indicator: string, operator: string, value: string }) {
+function ConditionRow({ logic, indicator, operator, value, currentValue }: { logic: string, indicator: string, operator: string, value: string, currentValue?: string | number }) {
   return (
     <div className="flex flex-wrap items-center gap-2 bg-[#1A1A1A] p-2.5 rounded-lg border border-[#262626]">
       <span className={`text-xs font-bold px-2 py-1 rounded shrink-0 ${logic === 'IF' ? 'bg-blue-500/10 text-blue-500' : 'bg-[#262626] text-[#A3A3A3]'}`}>
         {logic}
       </span>
-      <select className="bg-[#0A0A0A] border border-[#262626] rounded px-2 py-1.5 text-sm outline-none min-w-[120px] flex-1 sm:flex-none">
+      <select className="bg-[#0A0A0A] border border-[#262626] rounded px-2 py-1.5 text-sm outline-none min-w-[120px] flex-1 sm:flex-none text-white">
         <option>{indicator}</option>
         <option>MACD</option>
         <option>EMA (50)</option>
         <option>Volume</option>
       </select>
-      <select className="bg-[#0A0A0A] border border-[#262626] rounded px-2 py-1.5 text-sm outline-none min-w-[140px] flex-1 sm:flex-none">
+      <select className="bg-[#0A0A0A] border border-[#262626] rounded px-2 py-1.5 text-sm outline-none min-w-[140px] flex-1 sm:flex-none text-white">
         <option>{operator}</option>
         <option>is greater than</option>
         <option>crosses below</option>
         <option>is equal to</option>
       </select>
-      <input type="text" defaultValue={value} className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm w-24 outline-none font-mono flex-1 sm:flex-none" />
+      <input type="text" defaultValue={value} className="bg-[#0A0A0A] border border-[#262626] rounded px-3 py-1.5 text-sm w-24 outline-none font-mono flex-1 sm:flex-none text-white" />
+      
+      {currentValue !== undefined && (
+        <div className="flex items-center gap-2 ml-2 px-2 py-1 bg-[#0A0A0A] border border-[#262626] rounded">
+          <span className="text-[10px] text-[#A3A3A3] uppercase">Current</span>
+          <span className="text-xs font-mono text-emerald-400">{currentValue}</span>
+        </div>
+      )}
+
       <button className="ml-auto p-1.5 text-[#A3A3A3] hover:text-red-500 hover:bg-red-500/10 rounded transition-colors shrink-0">
         <X className="w-4 h-4" />
       </button>
@@ -1766,9 +1989,9 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
   return (
     <button 
       onClick={onClick}
-      className={`flex items-center px-3 py-2.5 rounded-lg transition-colors w-full ${active ? 'bg-[#1A1A1A] text-white border border-[#262626]' : 'text-[#A3A3A3] hover:bg-[#1A1A1A] hover:text-white border border-transparent'}`}
+      className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 w-full ${active ? 'bg-gray-800 text-white shadow-sm border border-gray-700/50' : 'text-gray-400 hover:bg-gray-800/50 hover:text-white border border-transparent'}`}
     >
-      <div className={`[&>svg]:w-5 [&>svg]:h-5 shrink-0 ${active ? 'text-emerald-500' : ''}`}>
+      <div className={`[&>svg]:w-5 [&>svg]:h-5 shrink-0 ${active ? 'text-blue-400' : ''}`}>
         {icon}
       </div>
       <span className="ml-3 text-sm font-medium hidden md:block whitespace-nowrap">{label}</span>

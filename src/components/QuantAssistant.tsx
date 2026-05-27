@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, ShieldAlert, TrendingUp, Target, CheckCircle2, XCircle } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { Send, Bot, User, ShieldAlert, TrendingUp, Target, CheckCircle2, XCircle, X } from 'lucide-react';
 import Markdown from 'react-markdown';
 
 interface Message {
@@ -11,25 +10,12 @@ interface Message {
   data?: any;
 }
 
-let aiClient: GoogleGenAI | null = null;
-
-function getAIClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      throw new Error('GEMINI_API_KEY environment variable is required');
-    }
-    aiClient = new GoogleGenAI({ apiKey: key });
-  }
-  return aiClient;
-}
-
-export function QuantAssistant({ onExecuteTrade }: { onExecuteTrade?: (tradeParams: any) => void }) {
+export function QuantAssistant({ onExecuteTrade, onClose }: { onExecuteTrade?: (tradeParams: any) => void, onClose?: () => void }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: "I am your Quantitative Trading Assistant. I can help clarify your trading doubts, provide deep technical and fundamental analysis, and offer Support/Resistance, Sentiment Analysis, and Risk/Reward profiles. I will not execute trades autonomously. I will wait for your 'EXECUTE' command."
+      content: "I am your Quantitative Trading Assistant. I can help clarify your trading doubts, provide deep technical and fundamental analysis. I will wait for your 'EXECUTE' command to prepare trade setups."
     }
   ]);
   const [input, setInput] = useState('');
@@ -64,7 +50,6 @@ export function QuantAssistant({ onExecuteTrade }: { onExecuteTrade?: (tradePara
     setIsTyping(true);
 
     if (userMsg.content.toUpperCase() === 'EXECUTE') {
-      // Keep the simulation for EXECUTE
       setTimeout(() => {
         const aiMsg: Message = {
           id: (Date.now() + 1).toString(),
@@ -93,22 +78,27 @@ export function QuantAssistant({ onExecuteTrade }: { onExecuteTrade?: (tradePara
         parts: [{ text: m.content }]
       }));
 
-      const ai = getAIClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
-        contents: [
-          ...history,
-          { role: 'user', parts: [{ text: userMsg.content }] }
-        ],
-        config: {
-          systemInstruction: "You are a Quantitative Trading Assistant. You help clarify traders' doubts, provide deep technical and fundamental analysis when provided a specific ticker, and provide Support/Resistance, Sentiment Analysis, and a Risk/Reward profile. Do not execute trades autonomously. Wait for the 'EXECUTE' command before formatting final trade parameters. Answer the user's trading questions and clarify their doubts. Format your responses using markdown."
-        }
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            ...history,
+            { role: 'user', parts: [{ text: userMsg.content }] }
+          ]
+        })
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate response');
+      }
+
+      const data = await response.json();
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.text || "I couldn't process that.",
+        content: data.reply || "I couldn't process that.",
       };
       setMessages(prev => [...prev, aiMsg]);
     } catch (error) {
@@ -125,9 +115,16 @@ export function QuantAssistant({ onExecuteTrade }: { onExecuteTrade?: (tradePara
 
   return (
     <div className="flex flex-col h-full panel overflow-hidden">
-      <div className="p-4 border-b border-[#262626] flex items-center gap-2 bg-[#1A1A1A]">
-        <Bot className="w-5 h-5 text-purple-500" />
-        <h2 className="text-sm font-bold uppercase tracking-wider">Quant Assistant</h2>
+      <div className="p-4 border-b border-[#262626] flex items-center justify-between bg-[#1A1A1A]">
+        <div className="flex items-center gap-2">
+          <Bot className="w-5 h-5 text-purple-500" />
+          <h2 className="text-sm font-bold uppercase tracking-wider">Quant Assistant</h2>
+        </div>
+        {onClose && (
+          <button onClick={onClose} className="p-1 rounded hover:bg-[#262626] text-[#A3A3A3] hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
