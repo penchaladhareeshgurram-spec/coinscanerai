@@ -1,5 +1,5 @@
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time, LineStyle, IPriceLine } from 'lightweight-charts';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { detectLiquidityPools } from '../indicators/liquidityPools';
 
 interface CandlestickData {
@@ -8,6 +8,18 @@ interface CandlestickData {
   high: number;
   low: number;
   close: number;
+}
+
+interface TooltipData {
+  visible: boolean;
+  x: number;
+  y: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  time: any;
+  pctChange?: number;
 }
 
 interface CandlestickChartProps {
@@ -43,6 +55,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const [tooltip, setTooltip] = useState<TooltipData | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -113,6 +126,40 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     seriesRef.current = candlestickSeries;
     candlestickSeries.setData(data);
+
+    chart.subscribeCrosshairMove((param) => {
+      if (
+        param.point === undefined ||
+        !param.time ||
+        param.point.x < 0 ||
+        param.point.x > chartContainerRef.current!.clientWidth ||
+        param.point.y < 0 ||
+        param.point.y > chartContainerRef.current!.clientHeight
+      ) {
+        setTooltip(null);
+      } else {
+        const data = param.seriesData.get(candlestickSeries) as any;
+        if (data) {
+          const open = data.open;
+          const close = data.close;
+          const high = data.high;
+          const low = data.low;
+          const pctChange = ((close - open) / open) * 100;
+          
+          setTooltip({
+            visible: true,
+            x: param.point.x,
+            y: param.point.y,
+            open,
+            high,
+            low,
+            close,
+            time: param.time,
+            pctChange
+          });
+        }
+      }
+    });
 
     window.addEventListener('resize', handleResize);
 
@@ -211,5 +258,51 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [currentPrice, data]);
 
-  return <div ref={chartContainerRef} className="w-full h-full" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={chartContainerRef} className="w-full h-full" />
+      {tooltip && tooltip.visible && (
+        <div
+          className="absolute z-50 pointer-events-none bg-[#141414]/90 backdrop-blur-sm border border-[#262626] rounded-lg shadow-xl p-3 text-[11px] font-mono whitespace-nowrap text-gray-300"
+          style={{
+            left: tooltip.x > (chartContainerRef.current?.clientWidth || 0) - 160 ? tooltip.x - 160 : tooltip.x + 15,
+            top: tooltip.y > (chartContainerRef.current?.clientHeight || 0) - 180 ? tooltip.y - 180 : tooltip.y + 15,
+          }}
+        >
+          <div className="flex justify-between gap-4 mb-1">
+            <span className="text-gray-500">O</span>
+            <span className={tooltip.open > tooltip.close ? "text-red-400" : "text-emerald-400"}>
+              {tooltip.open.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4 mb-1">
+            <span className="text-gray-500">H</span>
+            <span className={tooltip.high > tooltip.close ? "text-emerald-400" : "text-white"}>
+              {tooltip.high.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4 mb-1">
+            <span className="text-gray-500">L</span>
+            <span className={tooltip.low < tooltip.close ? "text-red-400" : "text-white"}>
+              {tooltip.low.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+            </span>
+          </div>
+          <div className="flex justify-between gap-4 mb-1">
+            <span className="text-gray-500">C</span>
+            <span className={tooltip.close > tooltip.open ? "text-emerald-400" : "text-red-400"}>
+              {tooltip.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+            </span>
+          </div>
+          <div className="h-[1px] w-full bg-[#262626] my-2" />
+          <div className="flex justify-between gap-4 font-semibold">
+            <span className="text-gray-500">Change</span>
+            <span className={tooltip.pctChange && tooltip.pctChange >= 0 ? "text-emerald-400" : "text-red-400"}>
+              {tooltip.pctChange && tooltip.pctChange > 0 ? "+" : ""}
+              {tooltip.pctChange?.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };

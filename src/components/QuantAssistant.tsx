@@ -90,7 +90,8 @@ export function QuantAssistant({ onExecuteTrade, onClose }: { onExecuteTrade?: (
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate response');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate response');
       }
 
       const data = await response.json();
@@ -101,12 +102,12 @@ export function QuantAssistant({ onExecuteTrade, onClose }: { onExecuteTrade?: (
         content: data.reply || "I couldn't process that.",
       };
       setMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "Sorry, I encountered an error while processing your request."
+        content: error.message || "Sorry, I encountered an error while processing your request."
       }]);
     } finally {
       setIsTyping(false);
