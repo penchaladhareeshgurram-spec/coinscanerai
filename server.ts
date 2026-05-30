@@ -4,6 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -27,10 +28,10 @@ async function startServer() {
       const { messages } = req.body;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-pro',
+        model: 'gemini-2.5-flash',
         contents: messages,
         config: {
-          systemInstruction: "You are a Quantitative Trading Assistant. You help clarify traders' doubts, provide deep technical and fundamental analysis when provided a specific ticker. When generating analysis or signals, explicitly list the specific technical indicators and parameters (e.g., RSI(14) value, EMA(20) crossover EMA(50), MACD histogram momentum, VWAP) that led to your conclusion. Do not execute trades autonomously. Wait for the 'EXECUTE' command before formatting final trade parameters. Provide clear Support/Resistance, Sentiment Analysis, and Risk/Reward."
+          systemInstruction: "You are an elite Quantitative Trading Assistant. You must strictly and exclusively answer questions related to trading, finance, quantitative analysis, economics, or crypto markets. If a user asks a non-trading question, politely decline to answer. When explicitly asked for technical analysis on a ticker, list specific indicators (e.g., RSI(14), EMA(20) crossover EMA(50), MACD, VWAP). Do not autonomously execute trades. Wait for the 'EXECUTE' command to formulate trade parameters."
         }
       });
 
@@ -38,6 +39,53 @@ async function startServer() {
     } catch (error: any) {
       console.error("AI Error:", error);
       res.status(500).json({ error: error.message || "Failed to generate response" });
+    }
+  });
+
+  // CoinDCX Trade Order Route
+  app.post("/api/trade/coindcx", async (req, res) => {
+    const apiKey = process.env.COINDCX_API_KEY;
+    const apiSecret = process.env.COINDCX_API_SECRET;
+
+    if (!apiKey || !apiSecret) {
+      return res.status(500).json({ error: "CoinDCX API keys are not configured in environment variables." });
+    }
+
+    try {
+      const { market, side, order_type, total_quantity, price_per_unit } = req.body;
+      const timeStamp = Math.floor(Date.now());
+      
+      const body = {
+        side, // 'buy' or 'sell'
+        order_type, // 'limit_order'
+        market, // e.g. "BTCUSDT" or "BTCINR"
+        price_per_unit, 
+        total_quantity, 
+        timestamp: timeStamp
+      };
+
+      const payload = Buffer.from(JSON.stringify(body)).toString();
+      const signature = crypto.createHmac('sha256', apiSecret).update(payload).digest('hex');
+
+      const response = await fetch("https://api.coindcx.com/exchange/v1/orders/create", {
+        method: "POST",
+        headers: {
+          'X-AUTH-APIKEY': apiKey,
+          'X-AUTH-SIGNATURE': signature,
+          'Content-Type': 'application/json'
+        },
+        body: payload
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+         return res.status(response.status).json({ error: data.message || "CoinDCX API error", details: data });
+      }
+      return res.json(data);
+    } catch(err: any) {
+      console.error("CoinDCX Execution Error:", err);
+      return res.status(500).json({ error: err.message });
     }
   });
 

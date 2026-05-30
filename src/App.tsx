@@ -214,7 +214,42 @@ export default function App() {
     setTradeHistory
   );
 
-  const handleExecuteTrade = (tradeParams: any) => {
+  const handleExecuteTrade = async (tradeParams: any) => {
+    // Attempt actual execution via CoinDCX API
+    try {
+      // Convert standard symbol (e.g. BTC/USD) to CoinDCX market format (BTCUSDT)
+      let coinDCXMarket = tradeParams.asset.replace('/', '');
+      if (coinDCXMarket === 'BTCUSD') coinDCXMarket = 'BTCUSDT';
+      if (coinDCXMarket === 'ETHUSD') coinDCXMarket = 'ETHUSDT';
+      
+      const side = tradeParams.type === 'LONG' ? 'buy' : 'sell';
+
+      const response = await fetch('/api/trade/coindcx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          market: coinDCXMarket,
+          side: side,
+          order_type: 'limit_order',
+          price_per_unit: tradeParams.entry,
+          total_quantity: tradeParams.size || 1
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        if (result.error && result.error.includes("environment variables")) {
+          aiLog("[API] CoinDCX API keys not found, simulating trade execution.", 'INFO');
+        } else {
+          aiLog(`[API ERROR] CoinDCX execution failed: ${result.error}`, 'RISK');
+        }
+      } else {
+        aiLog(`[EXCHANGE] CoinDCX Order Placed: ${result.orders[0]?.id || 'Success'}`, 'TRADE');
+      }
+    } catch (e) {
+      console.warn("CoinDCX API call failed", e);
+    }
+
     const newTrade = {
       id: `TRD-${Math.floor(Math.random() * 10000)}`,
       asset: tradeParams.asset,
@@ -861,9 +896,9 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-10">
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 pb-10">
       {/* AI Market Analysis & Candlestick */}
-      <div className="panel p-6 border border-emerald-500/20">
+      <div className="panel p-6 border border-emerald-500/20 col-span-1 lg:col-span-2 xl:col-span-3">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
             <Cpu className="w-5 h-5 text-emerald-500" />
@@ -922,9 +957,8 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Portfolio Summary */}
-        <div className="panel flex-1 p-6">
+      {/* Portfolio Summary */}
+      <div className="panel col-span-1 lg:col-span-1 xl:col-span-2 p-6 flex flex-col">
           <div className="flex flex-col sm:flex-row justify-between items-start mb-6 gap-4">
             <div>
               <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-1">
@@ -978,8 +1012,8 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
           </div>
         </div>
 
-        {/* Risk & AI Status */}
-        <div className="panel w-full lg:w-80 p-6 flex flex-col shrink-0">
+      {/* Risk & AI Status */}
+      <div className="panel col-span-1 lg:col-span-1 xl:col-span-1 p-6 flex flex-col h-full">
           <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider mb-4">AI Execution & Risk</h2>
           
           <div className="space-y-4 flex-1">
@@ -1023,11 +1057,9 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex flex-col xl:flex-row gap-6">
-        {/* Active Trades / History */}
-        <div className="panel flex-1 overflow-hidden flex flex-col">
+      {/* Active Trades / History */}
+      <div className="panel col-span-1 lg:col-span-2 xl:col-span-2 overflow-hidden flex flex-col min-h-[400px]">
           <div className="p-4 border-b border-[#262626] flex justify-between items-center">
             <div className="flex gap-4">
               <button 
@@ -1126,7 +1158,7 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
         </div>
 
         {/* AI Predictive Signals */}
-        <div className="panel w-full xl:w-96 flex flex-col shrink-0">
+        <div className="panel col-span-1 lg:col-span-1 xl:col-span-1 flex flex-col min-h-[400px]">
           <div className="p-4 border-b border-[#262626] flex justify-between items-center">
             <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider flex items-center">
               <Cpu className="w-4 h-4 mr-2 text-blue-500" /> AI Signals
@@ -1174,10 +1206,9 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
             ))}
           </div>
         </div>
-      </div>
 
       {/* Live Market News */}
-      <div className="h-[400px]">
+      <div className="col-span-1 lg:col-span-2 xl:col-span-3 h-[400px] mb-8">
         <NewsFeed />
       </div>
     </div>
@@ -1235,6 +1266,8 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
 
   const getBinanceInterval = (tf: string) => {
     switch(tf) {
+      case '1m': return '1m';
+      case '5m': return '5m';
       case '1H': return '1m';
       case '1D': return '15m'; 
       case '1W': return '1h';  
@@ -1444,7 +1477,7 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
               )}
             </div>
             <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626]">
-              {['1H', '1D', '1W', '1M', '1Y'].map(tf => (
+              {['1m', '5m', '1H', '1D', '1W', '1M', '1Y'].map(tf => (
                 <button 
                   key={tf} 
                   onClick={() => setTimeframe(tf)}

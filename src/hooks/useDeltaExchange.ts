@@ -67,8 +67,8 @@ export const useDeltaExchange = () => {
         reconnectTimer = setTimeout(connect, 3000);
       };
       
-      ws.onerror = (err) => {
-        console.error('Delta Exchange WS error', err);
+      ws.onerror = () => {
+        // Silently handle error and let onclose handle reconnect
         ws.close();
       };
     };
