@@ -28,7 +28,7 @@ async function startServer() {
       const { messages } = req.body;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-1.5-flash',
         contents: messages,
         config: {
           systemInstruction: "You are an elite Quantitative Trading Assistant. You must strictly and exclusively answer questions related to trading, finance, quantitative analysis, economics, or crypto markets. If a user asks a non-trading question, politely decline to answer. When explicitly asked for technical analysis on a ticker, list specific indicators (e.g., RSI(14), EMA(20) crossover EMA(50), MACD, VWAP). Do not autonomously execute trades. Wait for the 'EXECUTE' command to formulate trade parameters."
@@ -38,7 +38,13 @@ async function startServer() {
       res.json({ reply: response.text });
     } catch (error: any) {
       console.error("AI Error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate response" });
+      let errorMessage = "Failed to generate response due to an internal error.";
+      if (error.message && error.message.includes("429")) {
+        errorMessage = "API Quota Exceeded. Please check your Gemini API plan and billing details.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      res.status(500).json({ error: errorMessage });
     }
   });
 
