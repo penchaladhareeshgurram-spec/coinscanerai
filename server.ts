@@ -36,7 +36,7 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Using gpt-4o-mini as a good default
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
