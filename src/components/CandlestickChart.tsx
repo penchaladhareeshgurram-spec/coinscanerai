@@ -1,6 +1,7 @@
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, CrosshairMode, Time, LineStyle, IPriceLine } from 'lightweight-charts';
 import React, { useEffect, useRef, useState } from 'react';
 import { detectLiquidityPools } from '../indicators/liquidityPools';
+import { calculateSupportResistance } from '../indicators/supportResistance';
 
 interface CandlestickData {
   time: Time;
@@ -25,6 +26,8 @@ interface TooltipData {
 interface CandlestickChartProps {
   data: CandlestickData[];
   currentPrice?: number;
+  timeframe?: string;
+  showSupportResistance?: boolean;
   colors?: {
     backgroundColor?: string;
     textColor?: string;
@@ -40,6 +43,8 @@ interface CandlestickChartProps {
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   data,
   currentPrice,
+  timeframe = '1D',
+  showSupportResistance = false,
   colors: {
     backgroundColor = '#0A0A0A',
     textColor = '#A3A3A3',
@@ -212,7 +217,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     const currentPriceVal = data.length > 0 ? (data[data.length - 1] as any).close : 0;
 
     if (showLiquidityPools) {
-      const activePools = detectLiquidityPools(data as any);
+      const activePools = detectLiquidityPools(data as any, timeframe);
       
       activePools.forEach(pool => {
         const color = pool.type === 'buy-side' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.6)';
@@ -223,6 +228,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           color: color,
           lineWidth: 1,
           lineStyle: LineStyle.LargeDashed,
+          axisLabelVisible: true,
+          title: title,
+        }));
+      });
+    }
+
+    if (showSupportResistance) {
+      const srLevels = calculateSupportResistance(data as any, timeframe);
+      srLevels.forEach(level => {
+        const color = level.type === 'resistance' ? 'rgba(244, 63, 94, 0.8)' : 'rgba(52, 211, 153, 0.8)';
+        const title = level.type === 'resistance' ? `Res (${level.strength})` : `Sup (${level.strength})`;
+        
+        priceLinesRef.current.push(seriesRef.current!.createPriceLine({
+          price: level.price,
+          color: color,
+          lineWidth: 2,
+          lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
           title: title,
         }));
@@ -242,7 +264,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       });
     }
 
-  }, [data, showLiquidityPools, manualLiqLines]);
+  }, [data, showLiquidityPools, showSupportResistance, timeframe, manualLiqLines]);
 
   // Update the last candle with the current live price
   useEffect(() => {

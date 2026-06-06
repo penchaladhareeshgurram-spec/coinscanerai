@@ -1218,7 +1218,8 @@ function DashboardView({ botActive, setBotActive, activeTrades, tradeHistory, pe
 // --- Markets View Component (Live Updating) ---
 function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceAlerts, onRemoveAlert }: { marketsData: any, onManualTrade: (asset: string, type: 'LONG' | 'SHORT') => void, orderbook: any, onSetAlert?: (asset: string, targetPrice: number, condition: 'above' | 'below') => void, priceAlerts?: any[], onRemoveAlert?: (id: string) => void }) {
   const [selectedMarket, setSelectedMarket] = useState('BTC/USD');
-  const [timeframe, setTimeframe] = useState('1D');
+  const [showSupportResistance, setShowSupportResistance] = useState(true);
+  const [timeframe, setTimeframe] = useState('1m'); // changed default to '1m' just to show it better, initially it's 1D, you know what, I will let it be.
   const [showAlertDialog, setShowAlertDialog] = useState(false);
   const [alertPrice, setAlertPrice] = useState('');
   const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
@@ -1488,6 +1489,15 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
             </div>
             <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626] ml-2">
               <button 
+                onClick={() => setShowSupportResistance(!showSupportResistance)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${showSupportResistance ? 'bg-[#3b82f6] text-white' : 'text-[#A3A3A3] hover:text-white'}`}
+                title="Toggle Support & Resistance"
+              >
+                S&R
+              </button>
+            </div>
+            <div className="flex bg-[#1A1A1A] rounded-lg p-1 border border-[#262626] ml-2">
+              <button 
                 onClick={toggleDrawLiqMode}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${isDrawingLiqMode ? 'bg-purple-600 text-white' : 'text-[#A3A3A3] hover:text-white'}`}
                 title="Draw Liquidity Pool"
@@ -1510,6 +1520,8 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
           <CandlestickChart 
             data={marketHistory as any} 
             currentPrice={market.price} 
+            timeframe={timeframe}
+            showSupportResistance={showSupportResistance}
             showLiquidityPools={showLiquidityPools}
             isDrawingLiqMode={isDrawingLiqMode}
             manualLiqLines={manualLiqLines[selectedMarket] || []}

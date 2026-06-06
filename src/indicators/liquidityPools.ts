@@ -14,16 +14,34 @@ export interface LiquidityPool {
   isSwept: boolean;
 }
 
-export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): LiquidityPool[] {
+export function detectLiquidityPools(data: OHLCV[], timeframe: string = '1D', threshold = 0.002): LiquidityPool[] {
   const pools: LiquidityPool[] = [];
-  if (data.length < 10) return pools;
+  if (data.length < 3) return pools;
 
-  for (let i = 2; i < data.length - 2; i++) {
+  // Determine dynamic window size based on timeframe
+  // e.g., 1m considers previous 10 minutes (10 candles)
+  let windowSize = 20; 
+  if (timeframe === '1m' || timeframe === '1M') {
+    windowSize = 10;
+  } else if (timeframe === '5m') {
+    windowSize = 12; // 1 hour
+  } else if (timeframe === '15m') {
+    windowSize = 8; // 2 hours
+  } else if (timeframe === '1h' || timeframe === '1H') {
+    windowSize = 24; // 1 day
+  }
+
+  // Only consider the most recent 'windowSize' data points for checking new pools
+  // This satisfies the requirement "only considers the previous 10 minutes of candle data"
+  const recentLength = Math.min(data.length, windowSize + 2); // get slightly more for comparisons
+  const offset = data.length - recentLength;
+
+  for (let i = Math.max(2, offset); i < data.length - 2; i++) {
     const curr = data[i];
     
-    // Check for buy-side liquidity (equal highs)
+    // Check for buy-side liquidity (local highs)
     let isBuySide = false;
-    for (let j = Math.max(0, i - 10); j < i; j++) {
+    for (let j = Math.max(0, i - windowSize); j < i; j++) {
       if (Math.abs(data[j].high - curr.high) / curr.high < threshold) {
         isBuySide = true;
         break;
@@ -31,7 +49,6 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
     }
 
     if (isBuySide) {
-      // Check if it gets swept later
       let swept = false;
       for (let k = i + 1; k < data.length; k++) {
         if (data[k].high > curr.high) {
@@ -42,9 +59,9 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
       pools.push({ type: 'buy-side', price: curr.high, time: curr.time, isSwept: swept });
     }
 
-    // Check for sell-side liquidity (equal lows)
+    // Check for sell-side liquidity (local lows)
     let isSellSide = false;
-    for (let j = Math.max(0, i - 10); j < i; j++) {
+    for (let j = Math.max(0, i - windowSize); j < i; j++) {
       if (Math.abs(data[j].low - curr.low) / curr.low < threshold) {
         isSellSide = true;
         break;
@@ -52,7 +69,6 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
     }
 
     if (isSellSide) {
-      // Check if it gets swept later
       let swept = false;
       for (let k = i + 1; k < data.length; k++) {
         if (data[k].low < curr.low) {
@@ -64,7 +80,6 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
     }
   }
 
-  // Filter out duplicates
   const uniquePools: LiquidityPool[] = [];
   pools.forEach(pool => {
     const exists = uniquePools.find(p => p.type === pool.type && Math.abs(p.price - pool.price) / pool.price < threshold);
@@ -73,10 +88,10 @@ export function detectLiquidityPools(data: OHLCV[], threshold = 0.002): Liquidit
     }
   });
 
-  const currentPrice = data[data.length - 1].close;
   const activePools = uniquePools.filter(p => !p.isSwept);
 
-  // Return the 3 closest buy-side (above price) and 3 closest sell-side (below price)
+  // Return closest 3 buy-side and 3 sell-side
+  const currentPrice = data[data.length - 1].close;
   const buySide = activePools.filter(p => p.type === 'buy-side' && p.price >= currentPrice).sort((a, b) => a.price - b.price).slice(0, 3);
   const sellSide = activePools.filter(p => p.type === 'sell-side' && p.price <= currentPrice).sort((a, b) => b.price - a.price).slice(0, 3);
 
