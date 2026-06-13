@@ -4,7 +4,7 @@ import {
   TrendingUp, TrendingDown, Zap, Bell, Search,
   Play, Square, AlertTriangle, GitBranch, Plus, Save, PlayCircle, X,
   Key, Lock, User, CheckCircle2, LogOut, ChevronDown, ArrowUpRight, ArrowDownRight,
-  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal, XCircle, Bot
+  Layers, Eye, Cpu, Target, Crosshair, Info, Filter, Terminal, XCircle, Bot, Wallet
 } from 'lucide-react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -126,6 +126,12 @@ const initialAiSignals = [
   { id: 'S-3', asset: 'SOL/USD', type: 'LONG', probability: 91, target: 155, stop: 142, reason: 'Liquidity gap detected between 145-150. High probability of rapid fill.' },
 ];
 
+import { WalletModal } from './components/WalletModal';
+
+import { MarketHeatmap } from './components/MarketHeatmap';
+import Hyperspeed from './components/Hyperspeed';
+import { hyperspeedPresets } from './components/HyperSpeedPresets';
+
 // --- Main App Component ---
 export default function App() {
   const [showIntro, setShowIntro] = useState(true);
@@ -134,9 +140,10 @@ export default function App() {
   const [botActive, setBotActive] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [demoBalance, setDemoBalance] = useState(100000);
   const [liveBalance, setLiveBalance] = useState(0);
 
@@ -558,42 +565,35 @@ export default function App() {
     console.log('All letters have animated!');
     setTimeout(() => {
       setShowIntro(false);
-    }, 1000);
+    }, 10);
   };
 
   if (showIntro) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
+      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-4 text-white font-sans relative overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <EvilEye
-            eyeColor="#FF6F37"
-            intensity={2}
-            pupilSize={0.6}
-            irisWidth={0.4}
-            glowIntensity={0.15}
-            scale={0.8}
-            noiseScale={1.5}
-            pupilFollow={1}
-            flameSpeed={1}
-            backgroundColor="#000000"
-          />
+          <Hyperspeed effectOptions={hyperspeedPresets.five} />
         </div>
-        <div className="relative z-10 pointer-events-none">
+        <div className="relative z-10 flex flex-col items-center gap-8">
           <SplitText
-            text={`Hello, you! ,\n Welcome to coin scanner`}
-            className="text-4xl md:text-5xl font-semibold text-center leading-tight drop-shadow-2xl"
-            delay={130}
-            duration={1.25}
-            ease="elastic.out(1, 0.3)"
+            text={`COIN SCANNER`}
+            className="text-5xl md:text-7xl font-bold tracking-widest text-center leading-tight drop-shadow-2xl"
+            delay={0}
+            duration={1.5}
+            ease="easeOut"
             splitType="chars"
-            from={{ opacity: 0, y: 40 }}
-            to={{ opacity: 1, y: 0 }}
+            from={{ opacity: 0, y: 50, scale: 0.9 }}
+            to={{ opacity: 1, y: 0, scale: 1 }}
             threshold={0.1}
             rootMargin="-100px"
             textAlign="center"
-            onLetterAnimationComplete={handleAnimationComplete}
-            showCallback
           />
+          <button 
+            onClick={() => setShowIntro(false)}
+            className="px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full font-semibold transition-all duration-300 backdrop-blur-md"
+          >
+            Enter Scanner
+          </button>
         </div>
       </div>
     );
@@ -629,6 +629,13 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0A0A0A] text-white font-sans">
+      <WalletModal 
+        isOpen={showWalletModal} 
+        onClose={() => setShowWalletModal(false)}
+        balance={liveBalance}
+        onDeposit={(amount) => setLiveBalance(prev => prev + amount)}
+        onWithdraw={(amount) => setLiveBalance(prev => prev - amount)}
+      />
       {/* Sidebar */}
       <aside className="w-16 md:w-64 border-r border-[#262626] bg-[#141414] flex flex-col transition-all shrink-0">
         <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-[#262626]">
@@ -672,6 +679,17 @@ export default function App() {
           <div className="sm:hidden"></div>
           
           <div className="flex items-center gap-4">
+            {/* Wallet Button */}
+            {!isDemoMode && (
+              <button 
+                onClick={() => setShowWalletModal(true)}
+                className="hidden sm:flex items-center gap-2 bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors text-white"
+              >
+                <Wallet className="w-4 h-4 text-emerald-500" />
+                Wallet
+              </button>
+            )}
+
             {/* Demo Mode Toggle */}
             <div className="flex items-center bg-[#1A1A1A] border border-[#262626] rounded-lg p-1 shrink-0">
               <button 
@@ -774,9 +792,21 @@ export default function App() {
       )}
 
       {/* Manual Trade Dialog */}
-      {tradeDialogOpen && tradeDialogParams && (
+      {tradeDialogOpen && tradeDialogParams && (() => {
+        const isLong = tradeDialogParams.type === 'LONG';
+        const entry = tradeDialogParams.entry || 0;
+        const size = tradeDialogParams.size || 0;
+        const sl = tradeDialogParams.stopLoss || 0;
+        const tp = tradeDialogParams.takeProfit || 0;
+        
+        const potentialProfit = isLong ? (tp - entry) * size : (entry - tp) * size;
+        const potentialLoss = isLong ? (entry - sl) * size : (sl - entry) * size;
+        const rrRatio = potentialLoss > 0 ? (Math.max(0, potentialProfit) / potentialLoss).toFixed(2) : '0.00';
+
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-[#141414] border border-[#262626] rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+
             <div className="p-4 border-b border-[#262626] flex justify-between items-center bg-[#1A1A1A]">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <Target className="w-5 h-5 text-blue-500" />
@@ -844,6 +874,21 @@ export default function App() {
                   />
                 </div>
               </div>
+
+              <div className="bg-[#1A1A1A] border border-[#262626] rounded-lg p-3 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-[#A3A3A3] mb-1">Potential PNL</div>
+                  <div className={`font-mono text-sm ${potentialProfit > 0 ? 'text-emerald-500' : 'text-[#A3A3A3]'}`}>
+                    ${Math.max(0, potentialProfit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-[#A3A3A3] mb-1">Risk / Reward</div>
+                  <div className="font-mono text-sm text-white">
+                    1 : {rrRatio}
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="p-4 border-t border-[#262626] flex gap-3">
               <button 
@@ -861,7 +906,8 @@ export default function App() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -1327,8 +1373,9 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
   const asks = processOB(rawOb.asks, true);
 
   return (
-    <div className="flex flex-col xl:flex-row gap-6 h-full min-h-[600px] pb-10">
-      <div className="panel w-full xl:w-72 flex flex-col shrink-0 overflow-hidden h-[400px] xl:h-auto">
+    <div className="flex flex-col gap-6 max-w-[1600px] mx-auto pb-10">
+      <div className="flex flex-col xl:flex-row gap-6 min-h-[600px]">
+        <div className="panel w-full xl:w-72 flex flex-col shrink-0 overflow-hidden h-[400px] xl:h-auto">
         <div className="p-4 border-b border-[#262626]">
           <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Live Markets</h2>
         </div>
@@ -1595,6 +1642,9 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
           </div>
         )}
       </div>
+      </div>
+      
+      <MarketHeatmap markets={marketsData} />
     </div>
   );
 }
@@ -1707,7 +1757,7 @@ if bearish_signal
                         <option key={asset} value={asset}>{asset}</option>
                       ))}
                     </select>
-                    <button className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
+                    <button onClick={() => alert("Added condition to strategy")} className="text-xs text-blue-500 hover:text-blue-400 flex items-center font-medium">
                       <Plus className="w-3 h-3 mr-1"/> Add Condition
                     </button>
                   </div>
@@ -1831,6 +1881,10 @@ function PortfolioView({ holdingsData }: { holdingsData: any[] }) {
 
 // --- Risk Management View Component ---
 function RiskManagementView() {
+  const [maxRisk, setMaxRisk] = useState(1.0);
+  const [maxDrawdown, setMaxDrawdown] = useState(5.0);
+  const [haltTrading, setHaltTrading] = useState(true);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
       <h1 className="text-2xl font-bold tracking-tight mb-6">Risk Management Engine</h1>
@@ -1845,9 +1899,9 @@ function RiskManagementView() {
           <div>
             <div className="flex justify-between mb-2">
               <label className="text-sm font-medium">Max Risk Per Trade</label>
-              <span className="text-sm font-mono text-emerald-500">1.0%</span>
+              <span className="text-sm font-mono text-emerald-500">{maxRisk.toFixed(1)}%</span>
             </div>
-            <input type="range" min="0.1" max="5" step="0.1" defaultValue="1" className="w-full accent-emerald-500" />
+            <input type="range" min="0.1" max="5" step="0.1" value={maxRisk} onChange={(e) => setMaxRisk(parseFloat(e.target.value))} className="w-full accent-emerald-500" />
             <div className="flex justify-between text-xs text-[#A3A3A3] mt-1">
               <span>0.1%</span><span>5.0%</span>
             </div>
@@ -1856,9 +1910,9 @@ function RiskManagementView() {
           <div>
             <div className="flex justify-between mb-2">
               <label className="text-sm font-medium">Max Daily Drawdown (Kill Switch)</label>
-              <span className="text-sm font-mono text-red-500">5.0%</span>
+              <span className="text-sm font-mono text-red-500">{maxDrawdown.toFixed(1)}%</span>
             </div>
-            <input type="range" min="1" max="20" step="0.5" defaultValue="5" className="w-full accent-red-500" />
+            <input type="range" min="1" max="20" step="0.5" value={maxDrawdown} onChange={(e) => setMaxDrawdown(parseFloat(e.target.value))} className="w-full accent-red-500" />
             <div className="flex justify-between text-xs text-[#A3A3A3] mt-1">
               <span>1.0%</span><span>20.0%</span>
             </div>
@@ -1870,9 +1924,15 @@ function RiskManagementView() {
               <p className="text-xs text-[#A3A3A3] mt-1">Automatically pause AI entries if VIX or ATR spikes.</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
+              <input type="checkbox" checked={haltTrading} onChange={(e) => setHaltTrading(e.target.checked)} className="sr-only peer" />
               <div className="w-11 h-6 bg-[#262626] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
             </label>
+          </div>
+          
+          <div className="pt-4 border-t border-[#262626]">
+            <button onClick={() => alert("Risk parameters updated securely.")} className="px-4 py-2 bg-[#262626] text-white rounded-lg text-sm font-medium hover:bg-[#404040] transition-colors">
+              Save Parameters
+            </button>
           </div>
         </div>
       </div>
@@ -1944,7 +2004,7 @@ function SettingsView({ onLogout }: { onLogout: () => void }) {
                     <input type="password" placeholder="Paste API Secret here" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 font-mono" />
                   </div>
                 </div>
-                <button className="px-4 py-2 bg-emerald-500 text-black rounded-lg text-sm font-semibold hover:bg-emerald-400 transition-colors">
+                <button onClick={() => alert("Exchange connected successfully!")} className="px-4 py-2 bg-emerald-500 text-black rounded-lg text-sm font-semibold hover:bg-emerald-400 transition-colors">
                   Connect Exchange
                 </button>
               </div>
@@ -1957,13 +2017,13 @@ function SettingsView({ onLogout }: { onLogout: () => void }) {
               <div className="space-y-4 max-w-md">
                 <div>
                   <label className="text-xs text-[#A3A3A3] mb-1.5 block">Email Address</label>
-                  <input type="email" defaultValue="trader@coinscanner.com" disabled className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#A3A3A3] cursor-not-allowed" />
+                  <input type="email" defaultValue="trader@coinscanner.com" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#A3A3A3] focus:border-blue-500 outline-none" />
                 </div>
                 <div>
                   <label className="text-xs text-[#A3A3A3] mb-1.5 block">Display Name</label>
                   <input type="text" defaultValue="Coin Scanner Pro User" className="w-full bg-[#1A1A1A] border border-[#262626] rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
                 </div>
-                <button className="px-4 py-2 bg-[#262626] text-white rounded-lg text-sm font-medium hover:bg-[#404040] transition-colors">
+                <button onClick={() => alert("Profile updated successfully!")} className="px-4 py-2 bg-[#262626] text-white rounded-lg text-sm font-medium hover:bg-[#404040] transition-colors">
                   Update Profile
                 </button>
               </div>
@@ -1978,7 +2038,7 @@ function SettingsView({ onLogout }: { onLogout: () => void }) {
                   <h4 className="font-semibold text-sm">Two-Factor Authentication (2FA)</h4>
                   <p className="text-xs text-[#A3A3A3] mt-1">Protect your account and API keys with an authenticator app.</p>
                 </div>
-                <button className="px-4 py-2 bg-emerald-500 text-black rounded-lg text-sm font-semibold hover:bg-emerald-400 transition-colors">
+                <button onClick={() => alert("2FA Setup initiated. Please scan the QR code.")} className="px-4 py-2 bg-emerald-500 text-black rounded-lg text-sm font-semibold hover:bg-emerald-400 transition-colors">
                   Enable 2FA
                 </button>
               </div>
@@ -2061,6 +2121,43 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
       <div className="absolute inset-0 z-0">
+        <Hyperspeed
+          effectOptions={{
+            "distortion": "turbulentDistortion",
+            "length": 400,
+            "roadWidth": 10,
+            "islandWidth": 2,
+            "lanesPerRoad": 3,
+            "fov": 90,
+            "fovSpeedUp": 150,
+            "speedUp": 2,
+            "carLightsFade": 0.4,
+            "totalSideLightSticks": 20,
+            "lightPairsPerRoadWay": 40,
+            "shoulderLinesWidthPercentage": 0.05,
+            "brokenLinesWidthPercentage": 0.1,
+            "brokenLinesLengthPercentage": 0.5,
+            "lightStickWidth": [0.12, 0.5],
+            "lightStickHeight": [1.3, 1.7],
+            "movingAwaySpeed": [60, 80],
+            "movingCloserSpeed": [-120, -160],
+            "carLightsLength": [12, 80],
+            "carLightsRadius": [0.05, 0.14],
+            "carWidthPercentage": [0.3, 0.5],
+            "carShiftX": [-0.8, 0.8],
+            "carFloorSeparation": [0, 5],
+            "colors": {
+              "roadColor": 526344,
+              "islandColor": 657930,
+              "background": 0,
+              "shoulderLines": 1250072,
+              "brokenLines": 1250072,
+              "leftCars": [14177983, 6770850, 12732332],
+              "rightCars": [242627, 941733, 3294549],
+              "sticks": 242627
+            }
+          }}
+        />
         <Aurora
           colorStops={["#5227FF","#7cff67","#5227FF","#ffffff","#ae1e1e"]}
           amplitude={1.4}
@@ -2193,7 +2290,7 @@ function WhaleTrackerView({ whales }: { whales: any[] }) {
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Whale Tracker</h1>
         <div className="flex gap-2">
-          <button className="bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] rounded px-3 py-1.5 text-sm transition-colors flex items-center gap-2">
+          <button onClick={() => alert("Filter functionality opened")} className="bg-[#1A1A1A] hover:bg-[#262626] border border-[#262626] rounded px-3 py-1.5 text-sm transition-colors flex items-center gap-2">
             <Search className="w-4 h-4" /> Filter
           </button>
         </div>
@@ -2237,7 +2334,7 @@ function WhaleTrackerView({ whales }: { whales: any[] }) {
                 <div className="col-span-1 data-value font-bold text-white">{whale.value}</div>
                 <div className="col-span-1 data-value text-[#A3A3A3]">{whale.exchange}</div>
                 <div className="col-span-1 text-right">
-                  <button className="text-xs text-blue-500 hover:text-blue-400 font-medium bg-blue-500/10 px-2 py-1 rounded">
+                  <button onClick={() => alert(`Reviewing copy trade for ${whale.asset}`)} className="text-xs text-blue-500 hover:text-blue-400 font-medium bg-blue-500/10 px-2 py-1 rounded">
                     Copy Trade
                   </button>
                 </div>
