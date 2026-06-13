@@ -21,6 +21,8 @@ import { NewsFeed } from './components/NewsFeed';
 import { QuantAssistant } from './components/QuantAssistant';
 import { PendingApprovals } from './components/PendingApprovals';
 import { useBinanceKlines } from './hooks/useBinanceKlines';
+import { hyperspeedPresets } from './components/HyperSpeedPresets';
+import { Hyperspeed } from './components/HyperSpeed';
 
 // --- Mock Data Generators ---
 const generateHistory = (basePrice: number, volatility: number, count: number) => {
@@ -127,10 +129,6 @@ const initialAiSignals = [
 ];
 
 import { WalletModal } from './components/WalletModal';
-
-import { MarketHeatmap } from './components/MarketHeatmap';
-import Hyperspeed from './components/Hyperspeed';
-import { hyperspeedPresets } from './components/HyperSpeedPresets';
 
 // --- Main App Component ---
 export default function App() {
@@ -565,35 +563,33 @@ export default function App() {
     console.log('All letters have animated!');
     setTimeout(() => {
       setShowIntro(false);
-    }, 10);
+    }, 1500); // Increased slightly for better effect visibility
   };
 
   if (showIntro) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-4 text-white font-sans relative overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <Hyperspeed effectOptions={hyperspeedPresets.five} />
+      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
+        <div className="absolute inset-0 z-0 flex items-center justify-center">
+          <div style={{ width: '1080px', height: '1080px', position: 'relative' }}>
+            <Hyperspeed effectOptions={hyperspeedPresets.five} />
+          </div>
         </div>
-        <div className="relative z-10 flex flex-col items-center gap-8">
+        <div className="relative z-10 pointer-events-none">
           <SplitText
-            text={`COIN SCANNER`}
-            className="text-5xl md:text-7xl font-bold tracking-widest text-center leading-tight drop-shadow-2xl"
-            delay={0}
-            duration={1.5}
-            ease="easeOut"
+            text={`Hello, you! ,\n Welcome to coin scanner`}
+            className="text-4xl md:text-5xl font-semibold text-center leading-tight drop-shadow-2xl"
+            delay={10}
+            duration={1.25}
+            ease="elastic.out(1, 0.3)"
             splitType="chars"
-            from={{ opacity: 0, y: 50, scale: 0.9 }}
-            to={{ opacity: 1, y: 0, scale: 1 }}
+            from={{ opacity: 0, y: 40 }}
+            to={{ opacity: 1, y: 0 }}
             threshold={0.1}
             rootMargin="-100px"
             textAlign="center"
+            onLetterAnimationComplete={handleAnimationComplete}
+            showCallback
           />
-          <button 
-            onClick={() => setShowIntro(false)}
-            className="px-8 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-full font-semibold transition-all duration-300 backdrop-blur-md"
-          >
-            Enter Scanner
-          </button>
         </div>
       </div>
     );
@@ -792,21 +788,9 @@ export default function App() {
       )}
 
       {/* Manual Trade Dialog */}
-      {tradeDialogOpen && tradeDialogParams && (() => {
-        const isLong = tradeDialogParams.type === 'LONG';
-        const entry = tradeDialogParams.entry || 0;
-        const size = tradeDialogParams.size || 0;
-        const sl = tradeDialogParams.stopLoss || 0;
-        const tp = tradeDialogParams.takeProfit || 0;
-        
-        const potentialProfit = isLong ? (tp - entry) * size : (entry - tp) * size;
-        const potentialLoss = isLong ? (entry - sl) * size : (sl - entry) * size;
-        const rrRatio = potentialLoss > 0 ? (Math.max(0, potentialProfit) / potentialLoss).toFixed(2) : '0.00';
-
-        return (
+      {tradeDialogOpen && tradeDialogParams && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-[#141414] border border-[#262626] rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
-
             <div className="p-4 border-b border-[#262626] flex justify-between items-center bg-[#1A1A1A]">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <Target className="w-5 h-5 text-blue-500" />
@@ -874,21 +858,6 @@ export default function App() {
                   />
                 </div>
               </div>
-
-              <div className="bg-[#1A1A1A] border border-[#262626] rounded-lg p-3 grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-xs text-[#A3A3A3] mb-1">Potential PNL</div>
-                  <div className={`font-mono text-sm ${potentialProfit > 0 ? 'text-emerald-500' : 'text-[#A3A3A3]'}`}>
-                    ${Math.max(0, potentialProfit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-[#A3A3A3] mb-1">Risk / Reward</div>
-                  <div className="font-mono text-sm text-white">
-                    1 : {rrRatio}
-                  </div>
-                </div>
-              </div>
             </div>
             <div className="p-4 border-t border-[#262626] flex gap-3">
               <button 
@@ -906,8 +875,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        );
-      })()}
+      )}
     </div>
   );
 }
@@ -1373,9 +1341,8 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
   const asks = processOB(rawOb.asks, true);
 
   return (
-    <div className="flex flex-col gap-6 max-w-[1600px] mx-auto pb-10">
-      <div className="flex flex-col xl:flex-row gap-6 min-h-[600px]">
-        <div className="panel w-full xl:w-72 flex flex-col shrink-0 overflow-hidden h-[400px] xl:h-auto">
+    <div className="flex flex-col xl:flex-row gap-6 h-full min-h-[600px] pb-10">
+      <div className="panel w-full xl:w-72 flex flex-col shrink-0 overflow-hidden h-[400px] xl:h-auto">
         <div className="p-4 border-b border-[#262626]">
           <h2 className="text-sm font-semibold text-[#A3A3A3] uppercase tracking-wider">Live Markets</h2>
         </div>
@@ -1642,9 +1609,6 @@ function MarketsView({ marketsData, onManualTrade, orderbook, onSetAlert, priceA
           </div>
         )}
       </div>
-      </div>
-      
-      <MarketHeatmap markets={marketsData} />
     </div>
   );
 }
@@ -2121,43 +2085,6 @@ function AuthView({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center p-4 text-white font-sans relative overflow-hidden">
       <div className="absolute inset-0 z-0">
-        <Hyperspeed
-          effectOptions={{
-            "distortion": "turbulentDistortion",
-            "length": 400,
-            "roadWidth": 10,
-            "islandWidth": 2,
-            "lanesPerRoad": 3,
-            "fov": 90,
-            "fovSpeedUp": 150,
-            "speedUp": 2,
-            "carLightsFade": 0.4,
-            "totalSideLightSticks": 20,
-            "lightPairsPerRoadWay": 40,
-            "shoulderLinesWidthPercentage": 0.05,
-            "brokenLinesWidthPercentage": 0.1,
-            "brokenLinesLengthPercentage": 0.5,
-            "lightStickWidth": [0.12, 0.5],
-            "lightStickHeight": [1.3, 1.7],
-            "movingAwaySpeed": [60, 80],
-            "movingCloserSpeed": [-120, -160],
-            "carLightsLength": [12, 80],
-            "carLightsRadius": [0.05, 0.14],
-            "carWidthPercentage": [0.3, 0.5],
-            "carShiftX": [-0.8, 0.8],
-            "carFloorSeparation": [0, 5],
-            "colors": {
-              "roadColor": 526344,
-              "islandColor": 657930,
-              "background": 0,
-              "shoulderLines": 1250072,
-              "brokenLines": 1250072,
-              "leftCars": [14177983, 6770850, 12732332],
-              "rightCars": [242627, 941733, 3294549],
-              "sticks": 242627
-            }
-          }}
-        />
         <Aurora
           colorStops={["#5227FF","#7cff67","#5227FF","#ffffff","#ae1e1e"]}
           amplitude={1.4}
